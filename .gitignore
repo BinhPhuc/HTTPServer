@@ -1,0 +1,60 @@
+# Build artifacts
+build/
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Executables
+server
+*.out
+
+# Logs
+logs/
+*.log
+
+# IDE and Editor
+.vscode/
+.vs/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Compilation database
+compile_commands.json
+
+# CMake
+# CMakeCache.txt
+# CMakeFiles/
+# cmake_install.cmake
+# Makefile
+# *.cmake
+
+# Debug files
+*.dSYM/
+*.pdb
+*.ilk
+
+# Dependencies
+*.d
+
+# Core dumps
+core
+core.*
+vgcore.*
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+
+# OS specific
+Thumbs.db
+.directory
+
+.cache
