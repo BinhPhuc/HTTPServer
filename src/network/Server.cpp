@@ -28,6 +28,53 @@ void Server::stopServer() {
   Logger::getInstance(config::SERVER_LOG_PATH).log(INFO, "Server stopped.");
 }
 
+int create_socket(int domain, int type, int protocol) {
+  int sockfd = socket(domain, type, protocol);
+  if (sockfd == -1) {
+    Logger::getInstance(config::SERVER_LOG_PATH)
+        .log(ERROR, "Socket creation error: " + std::string(strerror(errno)));
+  }
+  return sockfd;
+}
+
+void get_addr_info_wrapper(const char *node, const char *service,
+                           const struct addrinfo *hints,
+                           struct addrinfo **res) {
+  int status = getaddrinfo(node, service, hints, res);
+  if (status != 0) {
+    Logger::getInstance(config::SERVER_LOG_PATH)
+        .log(ERROR, "getaddrinfo error: " + std::string(gai_strerror(status)));
+  }
+}
+
+int set_sock_option(int sockfd, int level, int optname) {
+  int yes = 1;
+  int status = setsockopt(sockfd, level, optname, &yes, sizeof(int));
+  if (status == -1) {
+    Logger::getInstance(config::SERVER_LOG_PATH)
+        .log(ERROR, "Setsockopt error: " + std::string(strerror(errno)));
+  }
+  return status;
+}
+
+int bind_socket(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+  int status = bind(sockfd, addr, addrlen);
+  if (status == -1) {
+    Logger::getInstance(config::SERVER_LOG_PATH)
+        .log(ERROR, "Bind error: " + std::string(strerror(errno)));
+  }
+  return status;
+}
+
+int socket_listen(int sockfd, int backlog) {
+  int status = listen(sockfd, backlog);
+  if (status == -1) {
+    Logger::getInstance(config::SERVER_LOG_PATH)
+        .log(ERROR, "Listen error: " + std::string(strerror(errno)));
+  }
+  return status;
+}
+
 void Server::start() {
   // getaddrinfo -> get socket fd -> bind -> listen -> accept
   struct addrinfo hints, *res;
@@ -36,38 +83,21 @@ void Server::start() {
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
 
-  int status;
-  if ((status = getaddrinfo(NULL, std::to_string(m_port).c_str(), &hints,
-                            &res) != 0)) {
-    Logger::getInstance(config::SERVER_LOG_PATH)
-        .log(ERROR, "getaddrinfo error: " + std::string(gai_strerror(status)));
-    return;
-  }
+  get_addr_info_wrapper(NULL, std::to_string(m_port).c_str(), &hints, &res);
 
   struct addrinfo *p;
   for (p = res; p != NULL; p = p->ai_next) {
     // create socket
-    if ((m_sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) ==
-        -1) {
-      Logger::getInstance(config::SERVER_LOG_PATH)
-          .log(ERROR, "Socket creation error: " + std::string(strerror(errno)));
-      continue;
-    }
+    m_sockfd = create_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 
-    int yes = 1;
-    if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) ==
-        -1) {
-      Logger::getInstance(config::SERVER_LOG_PATH)
-          .log(ERROR, "Setsockopt error: " + std::string(strerror(errno)));
+    if (set_sock_option(m_sockfd, SOL_SOCKET, SO_REUSEADDR) == -1) {
       close(m_sockfd);
       continue;
     }
 
     // bind
-    if (bind(m_sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+    if (bind_socket(m_sockfd, p->ai_addr, p->ai_addrlen) == -1) {
       close(m_sockfd);
-      Logger::getInstance(config::SERVER_LOG_PATH)
-          .log(ERROR, "Bind error: " + std::string(strerror(errno)));
       continue;
     }
 
@@ -83,9 +113,8 @@ void Server::start() {
   }
 
   // listen
-  if (listen(m_sockfd, config::MAX_CONNECTIONS) == -1) {
-    Logger::getInstance(config::SERVER_LOG_PATH)
-        .log(ERROR, "Listen error: " + std::string(strerror(errno)));
+  if (socket_listen(m_sockfd, config::MAX_CONNECTIONS) == -1) {
+    close(m_sockfd);
     return;
   }
 
