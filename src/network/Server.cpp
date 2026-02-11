@@ -1,3 +1,4 @@
+#include "http/HttpRequestReader.hpp"
 #include "utils/Constants.hpp"
 #include "utils/Logger.hpp"
 #include <asm-generic/socket.h>
@@ -131,6 +132,11 @@ void Server::start() {
           .log(ERROR, "Accept error: " + std::string(strerror(errno)));
       continue;
     }
+
+    std::string raw_request = HttpRequestReader::read_request(new_fd);
+
+    Logger::getInstance(config::SERVER_LOG_PATH)
+        .log(INFO, "Received request:\n" + raw_request);
 
     // simple HTTP response
     std::string body = "Hello World! Your Server is running.\n";
