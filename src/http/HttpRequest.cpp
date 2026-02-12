@@ -32,7 +32,8 @@ void HttpRequest::set_header(const std::string &key, const std::string &value) {
   // Because HTTP headers can have multiple values for the same key
   // (case-insensitive) Normalize to loowercase for consistent storage
   std::string normalized_key = key;
-  std::transform(normalized_key.begin(), normalized_key.end(), normalized_key.begin(),
+  std::transform(normalized_key.begin(), normalized_key.end(),
+                 normalized_key.begin(),
                  [](unsigned char c) { return std::tolower(c); });
   m_headers[normalized_key].push_back(value);
 }
