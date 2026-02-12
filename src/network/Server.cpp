@@ -1,3 +1,5 @@
+#include "http/HttpRequest.hpp"
+#include "http/HttpRequestParser.hpp"
 #include "http/HttpRequestReader.hpp"
 #include "utils/Constants.hpp"
 #include "utils/Logger.hpp"
@@ -135,8 +137,7 @@ void Server::start() {
 
     std::string raw_request = HttpRequestReader::read_request(new_fd);
 
-    Logger::getInstance(config::SERVER_LOG_PATH)
-        .log(INFO, "Received request:\n" + raw_request);
+    HttpRequest request = HttpRequestParser::parse(raw_request);
 
     // simple HTTP response
     std::string body = "Hello World! Your Server is running.\n";
