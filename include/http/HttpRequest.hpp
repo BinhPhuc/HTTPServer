@@ -27,8 +27,8 @@ public:
   std::unordered_map<std::string, std::vector<std::string>> get_headers() const;
   std::vector<std::string> get_headers(const std::string &key) const;
 
-  void set_body(const std::vector<uint8_t> &body);
-  std::vector<uint8_t> get_body() const;
+  void set_body(const std::string &body);
+  std::string get_body() const;
 
 private:
   std::string m_request_line; // 3 fields: method, path, version separated by sp
@@ -36,5 +36,5 @@ private:
   std::string m_path;
   std::string m_version;
   std::unordered_map<std::string, std::vector<std::string>> m_headers;
-  std::vector<uint8_t> m_body;
+  std::string m_body;
 };

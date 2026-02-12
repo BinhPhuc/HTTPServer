@@ -6,10 +6,7 @@ HttpRequest::HttpRequest()
     : m_request_line(), m_method(), m_path(), m_version(), m_headers(),
       m_body() {}
 
-HttpRequest::~HttpRequest() {
-  m_headers.clear();
-  m_body.clear();
-}
+HttpRequest::~HttpRequest() { m_headers.clear(); }
 
 void HttpRequest::set_request_line(const std::string &line) {
   m_request_line = line;
@@ -49,3 +46,7 @@ std::vector<std::string>
 HttpRequest::get_headers(const std::string &key) const {
   return get_headers().at(key);
 }
+
+void HttpRequest::set_body(const std::string &body) { m_body = body; }
+
+std::string HttpRequest::get_body() const { return m_body; }
