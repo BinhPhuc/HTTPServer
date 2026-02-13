@@ -22,20 +22,18 @@ Server::~Server() { stopServer(); }
 
 void Server::stopServer() {
   if (m_sockfd != -1) {
-    Logger::getInstance(config::SERVER_LOG_PATH)
-        .log(INFO, "Stopping server on port " + std::to_string(m_port) + ".");
+    spdlog::info("Stopping server on port {}.", m_port);
 
     close(m_sockfd);
     m_sockfd = -1;
   }
-  Logger::getInstance(config::SERVER_LOG_PATH).log(INFO, "Server stopped.");
+  spdlog::info("Server stopped.");
 }
 
 int create_socket(int domain, int type, int protocol) {
   int sockfd = socket(domain, type, protocol);
   if (sockfd == -1) {
-    Logger::getInstance(config::SERVER_LOG_PATH)
-        .log(ERROR, "Socket creation error: " + std::string(strerror(errno)));
+    spdlog::error("Socket creation error: {}", strerror(errno));
   }
   return sockfd;
 }
@@ -45,8 +43,7 @@ void get_addr_info_wrapper(const char *node, const char *service,
                            struct addrinfo **res) {
   int status = getaddrinfo(node, service, hints, res);
   if (status != 0) {
-    Logger::getInstance(config::SERVER_LOG_PATH)
-        .log(ERROR, "getaddrinfo error: " + std::string(gai_strerror(status)));
+    spdlog::error("getaddrinfo error: {}", gai_strerror(status));
   }
 }
 
@@ -54,8 +51,7 @@ int set_sock_option(int sockfd, int level, int optname) {
   int yes = 1;
   int status = setsockopt(sockfd, level, optname, &yes, sizeof(int));
   if (status == -1) {
-    Logger::getInstance(config::SERVER_LOG_PATH)
-        .log(ERROR, "Setsockopt error: " + std::string(strerror(errno)));
+    spdlog::error("Setsockopt error: {}", strerror(errno));
   }
   return status;
 }
@@ -63,8 +59,7 @@ int set_sock_option(int sockfd, int level, int optname) {
 int bind_socket(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   int status = bind(sockfd, addr, addrlen);
   if (status == -1) {
-    Logger::getInstance(config::SERVER_LOG_PATH)
-        .log(ERROR, "Bind error: " + std::string(strerror(errno)));
+    spdlog::error("Bind error: {}", strerror(errno));
   }
   return status;
 }
@@ -72,8 +67,7 @@ int bind_socket(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 int socket_listen(int sockfd, int backlog) {
   int status = listen(sockfd, backlog);
   if (status == -1) {
-    Logger::getInstance(config::SERVER_LOG_PATH)
-        .log(ERROR, "Listen error: " + std::string(strerror(errno)));
+    spdlog::error("Listen error: {}", strerror(errno));
   }
   return status;
 }
@@ -110,8 +104,7 @@ void Server::start() {
   freeaddrinfo(res);
 
   if (p == NULL) {
-    Logger::getInstance(config::SERVER_LOG_PATH)
-        .log(ERROR, "Failed to bind socket.");
+    spdlog::error("Failed to bind socket.");
     return;
   }
 
@@ -121,8 +114,7 @@ void Server::start() {
     return;
   }
 
-  Logger::getInstance(config::SERVER_LOG_PATH)
-      .log(INFO, "Server started on port " + std::to_string(m_port) + ".");
+  spdlog::info("Server started on port {}.", m_port);
 
   struct sockaddr_storage their_addr;
   while (1) {
@@ -130,8 +122,7 @@ void Server::start() {
     socklen_t addr_size = sizeof(their_addr);
     int new_fd = accept(m_sockfd, (struct sockaddr *)&their_addr, &addr_size);
     if (new_fd == -1) {
-      Logger::getInstance(config::SERVER_LOG_PATH)
-          .log(ERROR, "Accept error: " + std::string(strerror(errno)));
+      spdlog::error("Accept error: {}", strerror(errno));
       continue;
     }
 
@@ -149,8 +140,7 @@ void Server::start() {
                            "\r\n" +
                            body;
     if (send(new_fd, response.c_str(), response.size(), 0) == -1) {
-      Logger::getInstance(config::SERVER_LOG_PATH)
-          .log(ERROR, "Send error: " + std::string(strerror(errno)));
+      spdlog::error("Send error: {}", strerror(errno));
     }
     close(new_fd);
   }
