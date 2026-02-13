@@ -45,7 +45,12 @@ HttpRequest::get_headers() const {
 
 std::vector<std::string>
 HttpRequest::get_headers(const std::string &key) const {
-  return get_headers().at(key);
+  // Also normalize the key to lowercase when retrieving
+  std::string normalized_key = key;
+  std::transform(normalized_key.begin(), normalized_key.end(),
+                 normalized_key.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  return get_headers().at(normalized_key);
 }
 
 void HttpRequest::set_body(const std::string &body) { m_body = body; }
