@@ -1,16 +1,18 @@
-#include "http/HttpRequest.hpp"
+#include "handler/json/Json.hpp"
 #include "handler/request/HttpRequestParser.hpp"
 #include "handler/request/HttpRequestReader.hpp"
+#include "http/HttpRequest.hpp"
 #include "utils/Constants.hpp"
-#include <spdlog/spdlog.h>
 #include <asm-generic/socket.h>
 #include <cerrno>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <model/User.hpp>
 #include <netdb.h>
 #include <network/Server.hpp>
+#include <spdlog/spdlog.h>
 #include <string>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -130,10 +132,10 @@ void Server::start() {
 
     HttpRequest request = HttpRequestParser::parse(raw_request);
 
-    // simple HTTP response
-    std::string body = "Hello World! Your Server is running.\n";
+    User user{1, "binhphuc", "johndoe@gmail.com"};
+    std::string body = Json::stringify(user);
     std::string response = "HTTP/1.1 200 OK\r\n"
-                           "Content-Type: text/plain\r\n"
+                           "Content-Type: application/json\r\n"
                            "Content-Length: " +
                            std::to_string(body.size()) +
                            "\r\n"
