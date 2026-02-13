@@ -24,10 +24,10 @@ private:
   std::string get_body() const;
 
 public:
-  std::string status_line;
-  std::string protocol_version;
-  std::string status_code;
-  std::string status_message;
-  std::unordered_map<std::string, std::vector<std::string>> headers;
-  std::string body;
+  std::string m_status_line;
+  std::string m_protocol_version;
+  std::string m_status_code;
+  std::string m_status_message;
+  std::unordered_map<std::string, std::vector<std::string>> m_headers;
+  std::string m_body;
 };
