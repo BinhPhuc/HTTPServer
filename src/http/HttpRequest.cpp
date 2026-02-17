@@ -3,7 +3,7 @@
 #include <http/HttpRequest.hpp>
 
 HttpRequest::HttpRequest()
-    : m_request_line(), m_method(), m_path(), m_version(), m_headers(),
+    : m_request_line(), m_path_only(), m_method(), m_path(), m_version(), m_headers(),
       m_body() {}
 
 HttpRequest::~HttpRequest() { m_headers.clear(); }
@@ -13,6 +13,12 @@ void HttpRequest::set_request_line(const std::string &line) {
 }
 
 std::string HttpRequest::get_request_line() const { return m_request_line; }
+
+void HttpRequest::set_path_only(const std::string &path_only) {
+  m_path_only = path_only;
+}
+
+std::string HttpRequest::get_path_only() const { return m_path_only; }
 
 void HttpRequest::set_method(const std::string &method) { m_method = method; }
 

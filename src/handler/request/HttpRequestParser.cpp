@@ -27,9 +27,15 @@ HttpRequest HttpRequestParser::parse(const std::string &raw_request) {
   std::string method = request_line.substr(0, method_end);
   std::string path =
       request_line.substr(method_end + 1, path_end - method_end - 1);
+  size_t query_pos = path.find("?");
+  std::string path_only = path;
+  if (query_pos != std::string::npos) {
+    path_only = path.substr(0, query_pos);
+  }
   std::string version = request_line.substr(path_end + 1);
   request.set_method(method);
   request.set_path(path);
+  request.set_path_only(path_only);
   request.set_version(version);
 
   // Parse headers

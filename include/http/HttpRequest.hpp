@@ -19,6 +19,9 @@ public:
   void set_path(const std::string &path);
   std::string get_path() const;
 
+  void set_path_only(const std::string &path_only);
+  std::string get_path_only() const;
+
   void set_version(const std::string &version);
   std::string get_version() const;
 
@@ -32,6 +35,7 @@ public:
 
 private:
   std::string m_request_line; // 3 fields: method, path, version separated by sp
+  std::string m_path_only;    // path without query string
   std::string m_method;
   std::string m_path;
   std::string m_version;
