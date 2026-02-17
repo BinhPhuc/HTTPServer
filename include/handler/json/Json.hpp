@@ -15,7 +15,7 @@ public:
       return std::string(data);
     } else {
       json j = data;
-      return j.dump(4);
+      return j.dump();
     }
   }
 };
