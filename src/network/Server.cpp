@@ -1,6 +1,7 @@
 #include "handler/json/Json.hpp"
 #include "handler/request/HttpRequestParser.hpp"
 #include "handler/request/HttpRequestReader.hpp"
+#include "handler/response/HttpResponseReader.hpp"
 #include "http/HttpRequest.hpp"
 #include "utils/Constants.hpp"
 #include <asm-generic/socket.h>
@@ -132,16 +133,21 @@ void Server::start() {
 
     HttpRequest request = HttpRequestParser::parse(raw_request);
 
+    // Api Routing
+
+    // HttpResponse response = ... from Api Routing
+
     User user{1, "binhphuc", "johndoe@gmail.com"};
     std::string body = Json::stringify(user);
-    std::string response = "HTTP/1.1 200 OK\r\n"
+    std::string response = "HTTP/1.1 200 hihi\r\n"
                            "Content-Type: application/json\r\n"
                            "Content-Length: " +
                            std::to_string(body.size()) +
                            "\r\n"
                            "\r\n" +
                            body;
-    if (send(new_fd, response.c_str(), response.size(), 0) == -1) {
+    if (HttpResponseReader::send_all(new_fd, response.c_str(),
+                                     response.size()) == -1) {
       spdlog::error("Send error: {}", strerror(errno));
     }
     close(new_fd);
