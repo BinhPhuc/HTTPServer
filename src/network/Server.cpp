@@ -1,8 +1,10 @@
-#include "handler/json/Json.hpp"
 #include "handler/request/HttpRequestParser.hpp"
 #include "handler/request/HttpRequestReader.hpp"
+#include "handler/response/HttpResponseBuilder.hpp"
 #include "handler/response/HttpResponseReader.hpp"
 #include "http/HttpRequest.hpp"
+#include "http/HttpResponse.hpp"
+#include "network/ApiRouter.hpp"
 #include "utils/Constants.hpp"
 #include <asm-generic/socket.h>
 #include <cerrno>
@@ -19,7 +21,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-Server::Server(int port) : m_port(port), m_sockfd(-1) {}
+Server::Server(int port, ApiRouter &api_router)
+    : m_port(port), m_sockfd(-1), m_api_router(api_router) {}
 
 Server::~Server() { stopServer(); }
 
@@ -133,21 +136,14 @@ void Server::start() {
 
     HttpRequest request = HttpRequestParser::parse(raw_request);
 
-    // Api Routing
+    spdlog::info("{} {} {}", request.get_method(), request.get_path(),
+                 request.get_version());
 
-    // HttpResponse response = ... from Api Routing
+    HttpResponse response = m_api_router.dispatch(request);
+    std::string response_str = HttpResponseBuilder::build_response(response);
 
-    User user{1, "binhphuc", "johndoe@gmail.com"};
-    std::string body = Json::stringify(user);
-    std::string response = "HTTP/1.1 200 hihi\r\n"
-                           "Content-Type: application/json\r\n"
-                           "Content-Length: " +
-                           std::to_string(body.size()) +
-                           "\r\n"
-                           "\r\n" +
-                           body;
-    if (HttpResponseReader::send_all(new_fd, response.c_str(),
-                                     response.size()) == -1) {
+    if (HttpResponseReader::send_all(new_fd, response_str.c_str(),
+                                     response_str.size()) == -1) {
       spdlog::error("Send error: {}", strerror(errno));
     }
     close(new_fd);

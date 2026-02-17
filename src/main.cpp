@@ -1,4 +1,6 @@
 #include "config/LoggerConfig.hpp"
+#include "controller/UserController.hpp"
+#include "network/ApiRouter.hpp"
 #include "network/Server.hpp"
 #include "utils/Constants.hpp"
 #include <spdlog/spdlog.h>
@@ -8,7 +10,11 @@ int main() {
 
   spdlog::info("Server is starting...");
 
-  Server server(8080);
+  ApiRouter api_router;
+  UserController user_controller;
+  user_controller.registerRoutes(api_router);
+
+  Server server(8080, api_router);
 
   server.start();
   return 0;
