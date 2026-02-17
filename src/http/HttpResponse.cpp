@@ -1,8 +1,7 @@
-#include <algorithm>
 #include <http/HttpResponse.hpp>
 
 HttpResponse::HttpResponse()
-    : m_status_line(), m_protocol_version(), m_status_code(),
+    : m_status_line(), m_protocol_version("HTTP/1.1"), m_status_code(),
       m_status_message(), m_headers(), m_body() {}
 
 HttpResponse::~HttpResponse() { m_headers.clear(); }
@@ -37,23 +36,15 @@ std::string HttpResponse::get_status_message() const {
 
 void HttpResponse::set_header(const std::string &key,
                               const std::string &value) {
-  // Because HTTP headers can have multiple values for the same key
-  // (case-insensitive) Normalize to loowercase for consistent storage
-  m_headers[key].push_back(value);
+  // Because HTTP headers can ha to loowercase for consistent storage
+  m_headers[key].append(value);
 }
 
-std::unordered_map<std::string, std::vector<std::string>>
-HttpResponse::get_headers() const {
+std::unordered_map<std::string, std::string> HttpResponse::get_headers() const {
   return m_headers;
 }
 
-std::vector<std::string>
-HttpResponse::get_headers(const std::string &key) const {
-  // Also normalize the key to lowercase when retrieving
-  std::string normalized_key = key;
-  std::transform(normalized_key.begin(), normalized_key.end(),
-                 normalized_key.begin(),
-                 [](unsigned char c) { return std::tolower(c); });
+std::string HttpResponse::get_headers(const std::string &key) const {
   return get_headers().at(key);
 }
 
