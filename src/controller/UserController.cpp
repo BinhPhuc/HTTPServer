@@ -8,8 +8,6 @@ void UserController::registerRoutes(ApiRouter &r) {
     std::vector<User> users = this->listUsers(req);
     return HttpResponseBuilder::ok(Json::stringify(users));
   });
-  // r.add("GET", "/api/users/me",
-  //       [this](const HttpRequest &req) { return this->me(req); });
 }
 
 std::vector<User> UserController::listUsers(const HttpRequest &) {
