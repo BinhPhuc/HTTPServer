@@ -21,6 +21,10 @@ endforeach()
 
 add_executable(server ${SOURCES})
 
+target_compile_definitions(server PRIVATE 
+    PROJECT_ROOT_DIR="${CMAKE_SOURCE_DIR}"
+)
+
 target_link_libraries(server PRIVATE 
     nlohmann_json::nlohmann_json
     spdlog::spdlog
