@@ -36,8 +36,7 @@ std::string HttpResponse::get_status_message() const {
 
 void HttpResponse::set_header(const std::string &key,
                               const std::string &value) {
-  // Because HTTP headers can ha to loowercase for consistent storage
-  m_headers[key].append(value);
+  m_headers[key] = value;
 }
 
 std::unordered_map<std::string, std::string> HttpResponse::get_headers() const {
