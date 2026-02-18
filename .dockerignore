@@ -1,0 +1,49 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Build artifacts
+build/
+*.o
+*.a
+*.so
+*.exe
+*.out
+*.app
+*.dll
+*.dylib
+
+# vcpkg cache and build files
+vcpkg/buildtrees/
+vcpkg/downloads/
+vcpkg/packages/
+vcpkg/.git/
+build/vcpkg_installed/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/*.log
+
+# Documentation
+README.md
+*.md
+docs/
+
+# CMake temporary files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Other
+.dockerignore
+Dockerfile
+*.bak
+*.tmp
