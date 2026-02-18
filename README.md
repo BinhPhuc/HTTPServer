@@ -59,6 +59,50 @@ cmake --build .
 ./server
 ```
 
+## Docker Deployment
+
+### Using Docker Compose (Recommended)
+
+```bash
+# Build and start the server
+docker compose up
+
+# Run in detached mode
+docker compose up -d
+
+# Stop the server
+docker compose down
+
+# Rebuild and restart
+docker compose up --build
+```
+
+The server will be available at `http://localhost:8080`
+
+### Using Docker Manually
+
+**Build the image:**
+```bash
+docker build -t http-server .
+```
+
+**Run the container:**
+```bash
+docker run -d -p 8080:8080 --name http-server http-server
+```
+
+**View logs:**
+```bash
+docker logs http-server
+docker logs -f http-server  # Follow logs
+```
+
+**Stop and remove:**
+```bash
+docker stop http-server
+docker rm http-server
+```
+
 ## Adding New Dependencies
 
 ### Step 1: Search for Package
