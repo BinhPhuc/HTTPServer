@@ -1,6 +1,6 @@
 # HTTP Server
 
-A modern C++17 HTTP server implementation using **blocking I/O with thread pool** architecture for handling multiple concurrent connections.
+A modern C++20 HTTP server implementation using **blocking I/O with thread pool** architecture for handling multiple concurrent connections.
 
 ## Overview
 
@@ -14,7 +14,7 @@ This server employs a blocking I/O model combined with a thread pool to handle c
 ## Prerequisites
 
 - **CMake** 3.20 or higher
-- **C++17** compatible compiler (g++, clang++)
+- **C++20** compatible compiler (g++, clang++)
 - **Git**
 
 ## Quick Start
