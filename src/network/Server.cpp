@@ -16,13 +16,15 @@
 #include <netdb.h>
 #include <network/Server.hpp>
 #include <spdlog/spdlog.h>
+#include <sstream>
 #include <string>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <thread>
 #include <unistd.h>
 
 Server::Server(int port, ApiRouter &api_router)
-    : m_port(port), m_sockfd(-1), m_api_router(api_router) {}
+    : m_port(port), m_sockfd(-1), m_api_router(api_router), thread_pool() {}
 
 Server::~Server() { stopServer(); }
 
@@ -132,20 +134,28 @@ void Server::start() {
       continue;
     }
 
-    std::string raw_request = HttpRequestReader::read_request(new_fd);
+    thread_pool.enqueue([this, new_fd]() {
+      std::ostringstream oss;
+      oss << std::this_thread::get_id();
+      spdlog::info("Thread {} handling connection {}", oss.str(), new_fd);
 
-    HttpRequest request = HttpRequestParser::parse(raw_request);
+      std::string raw_request = HttpRequestReader::read_request(new_fd);
 
-    spdlog::info("{} {} {}", request.get_method(), request.get_path(),
-                 request.get_version());
+      HttpRequest request = HttpRequestParser::parse(raw_request);
 
-    HttpResponse response = m_api_router.dispatch(request);
-    std::string response_str = HttpResponseBuilder::build_response(response);
+      oss.str("");
+      oss << std::this_thread::get_id();
+      spdlog::info("Thread {} - {} {} {}", oss.str(), request.get_method(),
+                   request.get_path(), request.get_version());
 
-    if (HttpResponseReader::send_all(new_fd, response_str.c_str(),
-                                     response_str.size()) == -1) {
-      spdlog::error("Send error: {}", strerror(errno));
-    }
-    close(new_fd);
+      HttpResponse response = m_api_router.dispatch(request);
+      std::string response_str = HttpResponseBuilder::build_response(response);
+
+      if (HttpResponseReader::send_all(new_fd, response_str.c_str(),
+                                       response_str.size()) == -1) {
+        spdlog::error("Send error: {}", strerror(errno));
+      }
+      close(new_fd);
+    });
   }
 }
