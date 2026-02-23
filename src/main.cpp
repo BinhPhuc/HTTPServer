@@ -17,5 +17,7 @@ int main() {
 
   Server server(8080, api_router);
   server.start();
+  
+  logging::LoggerConfig::shutdown();
   return 0;
 }
