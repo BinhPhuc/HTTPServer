@@ -29,7 +29,6 @@ WORKDIR /app
 
 COPY --from=build /app/build/server ./server
 COPY --from=build /app/public ./public
-COPY --from=build /app/logs ./logs
 
 EXPOSE 8080
 
