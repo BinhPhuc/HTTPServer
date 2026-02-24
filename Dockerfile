@@ -16,7 +16,9 @@ WORKDIR /app
 
 COPY . .
 
-RUN ./script/build.sh
+RUN sed -i 's/\r//' script/build.sh script/run.sh script/build_and_run.sh && \
+  chmod +x script/build.sh && \
+  ./script/build.sh
 
 # Run stage
 FROM debian:12-slim AS run
