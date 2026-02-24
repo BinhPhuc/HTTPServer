@@ -58,3 +58,6 @@ Thumbs.db
 .directory
 
 .cache
+
+# vcpkg
+.vcpkg/

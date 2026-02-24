@@ -26,7 +26,12 @@ git clone git@github.com:BinhPhuc/HTTPServer.git
 cd HTTPServer
 ```
 
-### 2. Bootstrap vcpkg
+### 2. Install vcpkg
+```bash
+git clone https://github.com/Microsoft/vcpkg.git
+```
+
+### 3. Bootstrap vcpkg
 
 ```bash
 cd vcpkg
@@ -36,7 +41,7 @@ cd vcpkg
 cd ..
 ```
 
-### 3. Build and Run
+### 4. Build and Run
 
 **Recommended:**
 
