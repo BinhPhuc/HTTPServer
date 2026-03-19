@@ -1,15 +1,20 @@
 # HTTP Server
 
-A modern C++20 HTTP server implementation using **blocking I/O with thread pool** architecture for handling multiple concurrent connections.
+A modern C++20 HTTP server implementation using **epoll-based event loop** architecture for high-performance concurrent connection handling.
 
 ## Overview
 
-This server employs a blocking I/O model combined with a thread pool to handle concurrent requests efficiently. Each connection is processed by a dedicated thread from the pool, enabling the server to serve multiple clients simultaneously.
+This server employs a single-threaded event loop with epoll (Linux) for I/O multiplexing, enabling efficient handling of thousands of concurrent connections without the overhead of thread context switching. All sockets operate in non-blocking mode, with connection state managed through an event-driven model.
 
 ### Architecture
 
-**Current:** Blocking I/O + Thread Pool  
-**Roadmap:** Multiplexer I/O (epoll/kqueue) - Coming Soon
+**Current:** Epoll + Event Loop (Non-blocking I/O)
+
+**Key Components:**
+- **Epoll Event Loop**: Main thread monitors all connections using epoll_wait
+- **Event Handler**: Processes EPOLLIN, EPOLLOUT, and error events
+- **Connection State Machine**: Buffers and tracks read/write state per connection
+- **Non-blocking Sockets**: All I/O operations are non-blocking for maximum throughput
 
 ## Prerequisites
 
@@ -18,6 +23,36 @@ This server employs a blocking I/O model combined with a thread pool to handle c
 - **Git**
 
 ## Quick Start
+
+> **Recommendation for Development**: This server uses Linux-specific features (epoll). For the best development experience, use a Linux distribution (Ubuntu, Debian, Fedora, etc.) or WSL2 on Windows.
+
+### Install Required Dependencies (Linux)
+
+**Debian/Ubuntu:**
+```bash
+sudo apt update && sudo apt install -y \
+  build-essential \
+  cmake \
+  git \
+  curl \
+  zip \
+  unzip \
+  tar \
+  pkg-config
+```
+
+**Fedora/RHEL:**
+```bash
+sudo dnf install -y \
+  gcc-c++ \
+  cmake \
+  git \
+  curl \
+  zip \
+  unzip \
+  tar \
+  pkgconfig
+```
 
 ### 1. Clone the Repository
 
