@@ -12,19 +12,22 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
 #include <model/User.hpp>
 #include <netdb.h>
 #include <network/Server.hpp>
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <string>
+#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <thread>
 #include <unistd.h>
 
 Server::Server(int port, ApiRouter &api_router)
-    : m_port(port), m_sockfd(-1), m_api_router(api_router), thread_pool() {}
+    : m_port(port), m_sockfd(-1), m_epollfd(-1), m_api_router(api_router),
+      thread_pool() {}
 
 Server::~Server() { stopServer(); }
 
@@ -40,6 +43,7 @@ void Server::stopServer() {
 
 int create_socket(int domain, int type, int protocol) {
   int sockfd = socket(domain, type, protocol);
+  fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
   if (sockfd == -1) {
     spdlog::error("Socket creation error: {}", strerror(errno));
   }
@@ -79,6 +83,16 @@ int socket_listen(int sockfd, int backlog) {
   }
   return status;
 }
+
+int create_epoll() {
+  int epollfd = epoll_create1(0);
+  if (epollfd == -1) {
+    spdlog::error("Epoll creation error: {}", strerror(errno));
+  }
+  return epollfd;
+}
+
+void init_epoll() {}
 
 void Server::start() {
   // getaddrinfo -> get socket fd -> bind -> listen -> accept
@@ -123,6 +137,18 @@ void Server::start() {
   }
 
   spdlog::info("Server started on port {}.", m_port);
+
+  struct epoll_event event, events[config::MAX_CONNECTIONS];
+  int m_pollfd = create_epoll();
+
+  event.events = EPOLLIN;
+  event.data.fd = m_sockfd;
+  if (epoll_ctl(m_pollfd, EPOLL_CTL_ADD, m_sockfd, &event) == -1) {
+    spdlog::error("Epoll control error: {}", strerror(errno));
+    close(m_sockfd);
+    close(m_pollfd);
+    return;
+  }
 
   struct sockaddr_storage their_addr;
   while (1) {
