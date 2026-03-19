@@ -41,9 +41,20 @@ void Server::stopServer() {
   spdlog::info("Server stopped.");
 }
 
+void set_non_blocking(int sockfd) {
+  int flags = fcntl(sockfd, F_GETFL, 0);
+  if (flags == -1) {
+    spdlog::error("Fcntl get flags error: {}", strerror(errno));
+    return;
+  }
+  if (fcntl(sockfd, F_SETFL, flags | O_NONBLOCK) == -1) {
+    spdlog::error("Fcntl set non-blocking error: {}", strerror(errno));
+    return;
+  }
+}
+
 int create_socket(int domain, int type, int protocol) {
   int sockfd = socket(domain, type, protocol);
-  fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
   if (sockfd == -1) {
     spdlog::error("Socket creation error: {}", strerror(errno));
   }
@@ -108,6 +119,7 @@ void Server::start() {
   for (p = res; p != NULL; p = p->ai_next) {
     // create socket
     m_sockfd = create_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+    set_non_blocking(m_sockfd);
 
     if (set_sock_option(m_sockfd, SOL_SOCKET, SO_REUSEADDR) == -1) {
       close(m_sockfd);
@@ -136,28 +148,47 @@ void Server::start() {
     return;
   }
 
-  spdlog::info("Server started on port {}.", m_port);
-
   struct epoll_event event, events[config::MAX_CONNECTIONS];
-  int m_pollfd = create_epoll();
+  m_epollfd = create_epoll();
 
   event.events = EPOLLIN;
   event.data.fd = m_sockfd;
-  if (epoll_ctl(m_pollfd, EPOLL_CTL_ADD, m_sockfd, &event) == -1) {
+  if (epoll_ctl(m_epollfd, EPOLL_CTL_ADD, m_sockfd, &event) == -1) {
     spdlog::error("Epoll control error: {}", strerror(errno));
     close(m_sockfd);
-    close(m_pollfd);
+    close(m_epollfd);
     return;
   }
 
+  spdlog::info("Server started on port {}.", m_port);
+
   struct sockaddr_storage their_addr;
+  std::unordered_map<int, ConnectionState> connections;
   while (1) {
-    // accept connections
-    socklen_t addr_size = sizeof(their_addr);
-    int new_fd = accept(m_sockfd, (struct sockaddr *)&their_addr, &addr_size);
-    if (new_fd == -1) {
-      spdlog::error("Accept error: {}", strerror(errno));
-      continue;
+    int num_events = epoll_wait(m_epollfd, events, config::MAX_CONNECTIONS, -1);
+
+    if (num_events == -1) {
+      spdlog::error("Epoll wait error: {}", strerror(errno));
+      break;
+    }
+
+    for (int num_event = 0; num_event < num_events; num_event++) {
+      if (events[num_event].data.fd == m_sockfd) {
+        // New connection, will be handled in accept section
+        socklen_t addr_size = sizeof(their_addr);
+        int client_fd =
+            accept(m_sockfd, (struct sockaddr *)&their_addr, &addr_size);
+        if (client_fd == -1) {
+          spdlog::error("Accept error: {}", strerror(errno));
+          continue;
+        }
+        set_non_blocking(client_fd);
+        struct epoll_event client_event;
+        client_event.events = EPOLLIN | EPOLLET;
+        client_event.data.fd = client_fd;
+      } else {
+        //
+      }
     }
 
     thread_pool.enqueue([this, new_fd]() {

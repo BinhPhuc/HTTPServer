@@ -12,6 +12,13 @@ private:
   void stopServer();
   ApiRouter &m_api_router;
   ThreadPool thread_pool;
+  struct ConnectionState {
+    std::string read_buffer;
+    std::string write_buffer;
+    int fd;
+    size_t write_offset;
+    enum state { READING, WRITING, PROCESSING };
+  };
 
 public:
   Server(int port, ApiRouter &api_router);
