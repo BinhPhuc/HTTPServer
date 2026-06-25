@@ -1,10 +1,11 @@
 
-#include "handler/request/HttpRequestReader.hpp"
+#include <handler/request/HttpsRequestReader.hpp>
+#include <openssl/ssl.h>
 #include <string>
 #include <sys/socket.h>
 #include <sys/types.h>
 
-int HttpRequestReader::get_content_length(const std::string &headers) {
+int HttpsRequestReader::get_content_length(const std::string &headers) {
   std::string key = "Content-Length:";
   size_t pos = headers.find(key);
   if (pos == std::string::npos) {
@@ -20,23 +21,22 @@ int HttpRequestReader::get_content_length(const std::string &headers) {
   return std::stoi(value);
 }
 
-std::string HttpRequestReader::read_request(int sockfd) {
+std::string HttpsRequestReader::read_request(SSL *ssl) {
   // Flow:
   // 1. Read data from socket until \r\n\r\n is found (end of headers)
   // 2. Parse headers to find Content-Length
   // 3. Read remaining body based on Content-Length
   constexpr int buffer_size = 4096;
-  int tmp[buffer_size];
+  char tmp[buffer_size];
   std::string buffer;
   // Read data from begin to \r\n\r\n
   while (buffer.find("\r\n\r\n") == std::string::npos) {
-    ssize_t bytes_received = recv(sockfd, tmp, buffer_size - 1, 0);
+    ssize_t bytes_received = SSL_read(ssl, tmp, buffer_size - 1);
     if (bytes_received <= 0) {
       return "";
     }
     tmp[bytes_received] = '\0';
-    buffer.append(reinterpret_cast<char *>(tmp),
-                  static_cast<size_t>(bytes_received));
+    buffer.append(tmp, static_cast<size_t>(bytes_received));
   }
   size_t header_end = buffer.find("\r\n\r\n");
   if (header_end == std::string::npos) {
@@ -48,13 +48,12 @@ std::string HttpRequestReader::read_request(int sockfd) {
 
   // Read the remaining body if any
   while (buffer.length() < total_length) {
-    ssize_t bytes_received = recv(sockfd, tmp, buffer_size - 1, 0);
+    ssize_t bytes_received = SSL_read(ssl, tmp, buffer_size - 1);
     if (bytes_received <= 0) {
       return "";
     }
     tmp[bytes_received] = '\0';
-    buffer.append(reinterpret_cast<char *>(tmp),
-                  static_cast<size_t>(bytes_received));
+    buffer.append(tmp, static_cast<size_t>(bytes_received));
   }
   return buffer;
 }

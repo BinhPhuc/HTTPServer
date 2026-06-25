@@ -1,7 +1,9 @@
 #include "handler/request/HttpRequestParser.hpp"
 #include "handler/request/HttpRequestReader.hpp"
+#include "handler/request/HttpsRequestReader.hpp"
 #include "handler/response/HttpResponseBuilder.hpp"
-#include "handler/response/HttpResponseReader.hpp"
+#include "handler/response/HttpResponseSender.hpp"
+#include "handler/response/HttpsResponseSender.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
 #include "network/ApiRouter.hpp"
@@ -138,18 +140,18 @@ void Server::start() {
     SSL_CTX_ptr ctx = TLS::create_context();
     TLS::configure_context(ctx.get());
 
-    std::unique_ptr<SSL, decltype(&SSL_free)> ssl(SSL_new(ctx.get()), SSL_free);
+    SSL *ssl = SSL_new(ctx.get());
 
-    TLS::set_fd(ssl.get(), new_fd);
+    TLS::set_fd(ssl, new_fd);
 
-    TLS::accept(ssl.get());
+    TLS::accept(ssl);
 
-    thread_pool.enqueue([this, new_fd]() {
+    thread_pool.enqueue([this, new_fd, ssl]() {
       std::ostringstream oss;
       oss << std::this_thread::get_id();
       spdlog::info("Thread {} handling connection {}", oss.str(), new_fd);
 
-      std::string raw_request = HttpRequestReader::read_request(new_fd);
+      std::string raw_request = HttpsRequestReader::read_request(ssl);
 
       HttpRequest request = HttpRequestParser::parse(raw_request);
 
@@ -161,8 +163,8 @@ void Server::start() {
       HttpResponse response = m_api_router.dispatch(request);
       std::string response_str = HttpResponseBuilder::build_response(response);
 
-      if (HttpResponseReader::send_all(new_fd, response_str.c_str(),
-                                       response_str.size()) == -1) {
+      if (HttpsResponseSender::send_all(ssl, response_str.c_str(),
+                                        response_str.size()) == -1) {
         spdlog::error("Send error: {}", strerror(errno));
       }
       close(new_fd);

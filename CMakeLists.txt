@@ -30,7 +30,6 @@ target_link_libraries(server PRIVATE
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     OpenSSL::SSL
-    OpenSSL::CRYPTO
 )
 
 set_target_properties(server PROPERTIES

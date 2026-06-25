@@ -1,8 +1,9 @@
-#include "handler/response/HttpResponseReader.hpp"
+#include "handler/response/HttpsResponseSender.hpp"
 #include <cstddef>
+#include <openssl/ssl.h>
 #include <sys/socket.h>
 
-int HttpResponseReader::send_all(int sockfd, const char *buf, size_t len) {
+int HttpsResponseSender::send_all(SSL *ssl, const char *buf, size_t len) {
   if (len <= 0 || buf == nullptr) {
     return -1;
   }
@@ -10,7 +11,8 @@ int HttpResponseReader::send_all(int sockfd, const char *buf, size_t len) {
   const size_t total_len = static_cast<size_t>(len);
   while (total_sent < total_len) {
     const size_t remaining = total_len - total_sent;
-    const ssize_t sent = send(sockfd, buf + total_sent, remaining, 0);
+    const ssize_t sent =
+        SSL_write(ssl, buf + total_sent, static_cast<int>(remaining));
     if (sent <= 0) {
       return -1; // Send error or connection closed
     }
