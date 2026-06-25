@@ -25,7 +25,7 @@ std::string HttpRequestReader::read_request(int sockfd) {
   // 2. Parse headers to find Content-Length
   // 3. Read remaining body based on Content-Length
   constexpr int buffer_size = 4096;
-  int tmp[buffer_size];
+  char tmp[buffer_size];
   std::string buffer;
   // Read data from begin to \r\n\r\n
   while (buffer.find("\r\n\r\n") == std::string::npos) {
@@ -34,8 +34,7 @@ std::string HttpRequestReader::read_request(int sockfd) {
       return "";
     }
     tmp[bytes_received] = '\0';
-    buffer.append(reinterpret_cast<char *>(tmp),
-                  static_cast<size_t>(bytes_received));
+    buffer.append(tmp, static_cast<size_t>(bytes_received));
   }
   size_t header_end = buffer.find("\r\n\r\n");
   if (header_end == std::string::npos) {
@@ -52,8 +51,7 @@ std::string HttpRequestReader::read_request(int sockfd) {
       return "";
     }
     tmp[bytes_received] = '\0';
-    buffer.append(reinterpret_cast<char *>(tmp),
-                  static_cast<size_t>(bytes_received));
+    buffer.append(tmp, static_cast<size_t>(bytes_received));
   }
   return buffer;
 }
