@@ -5,6 +5,7 @@
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
 #include "network/ApiRouter.hpp"
+#include "tls/TLS.hpp"
 #include "utils/Constants.hpp"
 #include <asm-generic/socket.h>
 #include <cerrno>
@@ -133,6 +134,15 @@ void Server::start() {
       spdlog::error("Accept error: {}", strerror(errno));
       continue;
     }
+
+    SSL_CTX_ptr ctx = TLS::create_context();
+    TLS::configure_context(ctx.get());
+
+    std::unique_ptr<SSL, decltype(&SSL_free)> ssl(SSL_new(ctx.get()), SSL_free);
+
+    TLS::set_fd(ssl.get(), new_fd);
+
+    TLS::accept(ssl.get());
 
     thread_pool.enqueue([this, new_fd]() {
       std::ostringstream oss;

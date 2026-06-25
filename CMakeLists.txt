@@ -5,10 +5,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb -pedantic-errors -Wall -Weffc++ -Wextra -Wconversion -Wsign-conversion")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb -pedantic-errors -Wall -Weffc++ -Wextra -Wconversion -Wsign-conversion -lcrypto -lssl")
 
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED COMPONENTS SSL)
 
 include_directories(include)
 
@@ -16,18 +17,20 @@ file(GLOB_RECURSE SOURCES "src/*.cpp")
 
 message(STATUS "Found source files:")
 foreach(SOURCE_FILE ${SOURCES})
-    message(STATUS "  ${SOURCE_FILE}")
+  message(STATUS "  ${SOURCE_FILE}")
 endforeach()
 
 add_executable(server ${SOURCES})
 
-target_compile_definitions(server PRIVATE 
+target_compile_definitions(server PRIVATE
     PROJECT_ROOT_DIR="${CMAKE_SOURCE_DIR}"
 )
 
-target_link_libraries(server PRIVATE 
+target_link_libraries(server PRIVATE
     nlohmann_json::nlohmann_json
     spdlog::spdlog
+    OpenSSL::SSL
+    OpenSSL::CRYPTO
 )
 
 set_target_properties(server PROPERTIES
