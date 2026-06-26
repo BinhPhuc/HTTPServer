@@ -1,4 +1,5 @@
 #include <openssl/err.h>
+#include <openssl/ssl.h>
 #include <spdlog/spdlog.h>
 #include <tls/TLS.hpp>
 
@@ -21,7 +22,7 @@ SSL_CTX_ptr TLS::create_context() {
     throw std::runtime_error("Unable to create SSL context: " +
                              getOpenSSLError());
   }
-  return SSL_CTX_ptr(ctx, SSL_CTX_free);
+  return SSL_CTX_ptr(ctx);
 }
 
 void TLS::configure_context(SSL_CTX *ctx, const std::string &cert_file,
@@ -56,8 +57,8 @@ int TLS::set_fd(SSL *ssl, int fd) {
 int TLS::accept(SSL *ssl) {
   int ret = SSL_accept(ssl);
   if (ret <= 0) {
-    spdlog::error("SSL accept error: {}", getOpenSSLError());
-    throw std::runtime_error("SSL accept error: " + getOpenSSLError());
+    int err = SSL_get_error(ssl, ret);
+    spdlog::error("TLS handshake failed (err={}): {}", err, getOpenSSLError());
   }
   return ret;
 }

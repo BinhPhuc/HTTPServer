@@ -1,6 +1,7 @@
 #pragma once
 
 #include "network/ApiRouter.hpp"
+#include "tls/TLS.hpp"
 #include <netdb.h>
 #include <thread_pool/thread_pool.hpp>
 
@@ -11,6 +12,7 @@ private:
   void stopServer();
   ApiRouter &m_api_router;
   ThreadPool thread_pool;
+  SSL_CTX_ptr m_ctx;
 
 public:
   Server(int port, ApiRouter &api_router);

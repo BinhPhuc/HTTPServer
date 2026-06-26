@@ -27,7 +27,10 @@
 #include <unistd.h>
 
 Server::Server(int port, ApiRouter &api_router)
-    : m_port(port), m_sockfd(-1), m_api_router(api_router), thread_pool() {}
+    : m_port(port), m_sockfd(-1), m_api_router(api_router), thread_pool(),
+      m_ctx(TLS::create_context()) {
+  TLS::configure_context(m_ctx.get());
+}
 
 Server::~Server() { stopServer(); }
 
@@ -137,37 +140,47 @@ void Server::start() {
       continue;
     }
 
-    SSL_CTX_ptr ctx = TLS::create_context();
-    TLS::configure_context(ctx.get());
+    thread_pool.enqueue([this, new_fd]() {
+      try {
+        std::ostringstream oss;
+        oss << std::this_thread::get_id();
+        spdlog::info("Thread {} handling connection {}", oss.str(), new_fd);
 
-    SSL *ssl = SSL_new(ctx.get());
+        SSL_ptr ssl(SSL_new(m_ctx.get()));
 
-    TLS::set_fd(ssl, new_fd);
+        TLS::set_fd(ssl.get(), new_fd);
 
-    TLS::accept(ssl);
+        int ret = TLS::accept(ssl.get());
 
-    thread_pool.enqueue([this, new_fd, ssl]() {
-      std::ostringstream oss;
-      oss << std::this_thread::get_id();
-      spdlog::info("Thread {} handling connection {}", oss.str(), new_fd);
+        if (ret <= 0) {
+          spdlog::error("TLS handshake failed for connection {}", new_fd);
+          ssl.reset();
+          close(new_fd);
+          return;
+        }
 
-      std::string raw_request = HttpsRequestReader::read_request(ssl);
+        std::string raw_request = HttpsRequestReader::read_request(ssl.get());
 
-      HttpRequest request = HttpRequestParser::parse(raw_request);
+        HttpRequest request = HttpRequestParser::parse(raw_request);
 
-      oss.str("");
-      oss << std::this_thread::get_id();
-      spdlog::info("Thread {} - {} {} {}", oss.str(), request.get_method(),
-                   request.get_path(), request.get_version());
+        oss.str("");
+        oss << std::this_thread::get_id();
+        spdlog::info("Thread {} - {} {} {}", oss.str(), request.get_method(),
+                     request.get_path(), request.get_version());
 
-      HttpResponse response = m_api_router.dispatch(request);
-      std::string response_str = HttpResponseBuilder::build_response(response);
+        HttpResponse response = m_api_router.dispatch(request);
+        std::string response_str =
+            HttpResponseBuilder::build_response(response);
 
-      if (HttpsResponseSender::send_all(ssl, response_str.c_str(),
-                                        response_str.size()) == -1) {
-        spdlog::error("Send error: {}", strerror(errno));
+        if (HttpsResponseSender::send_all(ssl.get(), response_str.c_str(),
+                                          response_str.size()) == -1) {
+          spdlog::error("Send error: {}", strerror(errno));
+        }
+        close(new_fd);
+      } catch (const std::exception &e) {
+        spdlog::error("Exception in connection handler: {}", e.what());
+        close(new_fd);
       }
-      close(new_fd);
     });
   }
 }

@@ -4,7 +4,28 @@
 #include <memory>
 #include <openssl/ssl.h>
 
-using SSL_CTX_ptr = std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)>;
+struct OpenSSLDeleter {
+  void operator()(SSL *ssl) const {
+    if (ssl) {
+      SSL_shutdown(ssl);
+      SSL_free(ssl);
+    }
+  }
+  void operator()(SSL_CTX *ctx) const {
+    if (ctx) {
+      SSL_CTX_free(ctx);
+    }
+  }
+  void operator()(BIO *bio) const {
+    if (bio) {
+      BIO_free_all(bio);
+    }
+  }
+};
+
+using SSL_CTX_ptr = std::unique_ptr<SSL_CTX, OpenSSLDeleter>;
+using SSL_ptr = std::unique_ptr<SSL, OpenSSLDeleter>;
+using BIO_ptr = std::unique_ptr<BIO, OpenSSLDeleter>;
 
 class TLS {
 public:

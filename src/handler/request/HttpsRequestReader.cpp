@@ -1,12 +1,15 @@
 
+#include <charconv>
 #include <handler/request/HttpsRequestReader.hpp>
 #include <openssl/ssl.h>
 #include <string>
+#include <string_view>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <system_error>
 
 int HttpsRequestReader::get_content_length(const std::string &headers) {
-  std::string key = "Content-Length:";
+  std::string_view key = "Content-Length:";
   size_t pos = headers.find(key);
   if (pos == std::string::npos) {
     return 0;
@@ -18,7 +21,17 @@ int HttpsRequestReader::get_content_length(const std::string &headers) {
   }
   size_t end_pos = headers.find("\r\n", pos);
   std::string value = headers.substr(pos, end_pos - pos);
-  return std::stoi(value);
+  int content_length = 0;
+  auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(),
+                                   content_length);
+  if (ec == std::errc()) {
+    return content_length;
+  } else if (ec == std::errc::invalid_argument) {
+    return 0;
+  } else if (ec == std::errc::result_out_of_range) {
+    return 0;
+  }
+  return content_length;
 }
 
 std::string HttpsRequestReader::read_request(SSL *ssl) {

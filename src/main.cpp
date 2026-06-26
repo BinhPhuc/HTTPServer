@@ -15,9 +15,9 @@ int main() {
   UserController user_controller;
   user_controller.registerRoutes(api_router);
 
-  Server server(8080, api_router);
+  Server server(config::PORT, api_router);
   server.start();
-  
+
   logging::LoggerConfig::shutdown();
   return 0;
 }

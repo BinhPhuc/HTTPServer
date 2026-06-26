@@ -4,7 +4,7 @@
 #include <sys/socket.h>
 
 int HttpsResponseSender::send_all(SSL *ssl, const char *buf, size_t len) {
-  if (len <= 0 || buf == nullptr) {
+  if (len == 0 || buf == nullptr) {
     return -1;
   }
   size_t total_sent = 0;
