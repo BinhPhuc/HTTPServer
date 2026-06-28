@@ -21,11 +21,15 @@ void ApiRouter::add(const std::string &method, const std::string &path,
 HttpResponse ApiRouter::dispatch(const HttpRequest &request) {
   std::vector<std::string> segments = split_path(request.get_path_only());
   std::vector<std::string> static_files;
+  std::string resource_path;
+  std::string resource_name;
   for (const auto &segment : segments) {
+    resource_path += "/" + segment;
     if (segment.find('.') != std::string::npos) {
-      static_files.push_back(segment);
+      resource_name = segment;
     }
   }
+
   if (!static_files.empty()) {
     return handle_static_file_request(request, static_files);
   } else {
@@ -104,14 +108,15 @@ std::string get_content_type(const std::string &file_path) {
 
 HttpResponse ApiRouter::handle_static_file_request(
     const HttpRequest &request, const std::vector<std::string> &static_files) {
-  if (request.get_method() != "GET") {
+  if (request.get_method() == "POST") {
     return HttpResponseBuilder::bad_request("Method not allowed");
   }
   if (static_files.size() > 1) {
     return HttpResponseBuilder::bad_request("Invalid path");
   }
   std::filesystem::path root_path = std::filesystem::path(PROJECT_ROOT_DIR);
-  std::string file_path = (root_path / m_root_folder / static_files[0]).string();
+  std::string file_path =
+      (root_path / m_root_folder / static_files[0]).string();
   spdlog::info("Serving static file: {}", file_path);
   HttpResponse res;
   std::string content = from_file_to_byte(file_path);
