@@ -16,6 +16,7 @@ enum class StaticFileEnum {
   TXT,
   PDF,
   ZIP,
+  OCTET_STREAM
 };
 
 std::string StaticFile(StaticFileEnum type);

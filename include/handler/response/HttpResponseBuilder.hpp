@@ -5,7 +5,8 @@
 class HttpResponseBuilder {
 public:
   static HttpResponse ok(const std::string &body);
-  static HttpResponse not_found(const std::string &body);
+  static HttpResponse not_found();
   static HttpResponse bad_request(const std::string &body);
+  static HttpResponse internal_server_error(const std::string &body);
   static std::string build_response(const HttpResponse &response);
 };

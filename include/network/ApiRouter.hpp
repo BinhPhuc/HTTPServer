@@ -3,6 +3,7 @@
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
 #include <functional>
+#include <utility>
 
 class ApiRouter {
 public:
@@ -17,8 +18,8 @@ private:
   std::unordered_map<std::string, Handler> m_routes;
   std::string m_root_folder;
   std::vector<std::string> split_path(const std::string &path) const;
-  HttpResponse
-  handle_static_file_request(const HttpRequest &request,
-                             const std::vector<std::string> &static_files);
+  std::pair<HttpResponse, bool>
+  handle_get_static_file_request(const HttpRequest &request);
+  HttpResponse handle_upload_static_file_request(const HttpRequest &request);
   HttpResponse handle_api_request(const HttpRequest &request);
 };

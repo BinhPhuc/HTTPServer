@@ -28,7 +28,9 @@ std::string StaticFile(StaticFileEnum type) {
     return "application/pdf";
   case StaticFileEnum::ZIP:
     return "application/zip";
-  default:
+  case StaticFileEnum::OCTET_STREAM:
     return "application/octet-stream";
+  default:
+    return "application/octet-stream"; // default to octet-stream
   }
 }
