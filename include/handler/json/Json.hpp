@@ -18,4 +18,10 @@ public:
       return j.dump();
     }
   }
+
+  static std::string json_body(const std::string status_code,
+                               const std::string msg) {
+    json body = {{"status_code", status_code}, {"message", msg}};
+    return body.dump();
+  }
 };

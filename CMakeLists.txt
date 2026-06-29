@@ -13,7 +13,7 @@ find_package(OpenSSL REQUIRED COMPONENTS SSL)
 
 include_directories(include)
 
-file(GLOB_RECURSE SOURCES "src/*.cpp")
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
 message(STATUS "Found source files:")
 foreach(SOURCE_FILE ${SOURCES})

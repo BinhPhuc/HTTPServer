@@ -2,17 +2,15 @@
 #include "enum/ContentTypeEnum.hpp"
 #include "enum/FileEnum.hpp"
 #include "enum/HttpEnum.hpp"
+#include "handler/json/Json.hpp"
 #include "handler/response/HttpResponseBuilder.hpp"
 #include "http/HttpResponse.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <sys/socket.h>
-
-using json = nlohmann::json;
 
 ApiRouter::ApiRouter() : m_routes(), m_root_folder() {}
 
@@ -41,7 +39,6 @@ HttpResponse ApiRouter::dispatch(const HttpRequest &request) {
 }
 
 HttpResponse ApiRouter::handle_api_request(const HttpRequest &request) {
-  spdlog::info("chay vao day");
   std::string key = request.get_method() + " " + request.get_path_only();
   auto it = m_routes.find(key);
   if (it != m_routes.end()) {
@@ -164,16 +161,17 @@ ApiRouter::handle_upload_static_file_request(const HttpRequest &request) {
         ss << root_path.string() << "/" << m_root_folder << "/" << filename;
         std::string file_path = ss.str();
         std::ofstream outfile(file_path, std::ios::binary);
-        outfile.write(file_content.c_str(), file_content.size());
+        outfile.write(file_content.c_str(), (int)file_content.size());
         outfile.close();
       }
     }
     body.erase(0, end);
   }
-  HttpResponse res = HttpResponseBuilder::ok("File uploaded successfully");
+  std::string json_body =
+      Json::json_body(HttpResponseStatusCode(HttpResponseStatusCodeEnum::OK),
+                      "File uploaded successfully");
+  HttpResponse res = HttpResponseBuilder::ok(json_body);
   res.set_header("Content-Type", "application/json, charset=utf-8");
-  json response_body = {{"message", "File uploaded successfully"}};
-  res.set_body(response_body.dump());
   return res;
 }
 

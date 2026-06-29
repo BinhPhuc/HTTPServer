@@ -1,10 +1,8 @@
 #include "handler/response/HttpResponseBuilder.hpp"
 #include "enum/HttpEnum.hpp"
+#include "handler/json/Json.hpp"
 #include "http/HttpResponse.hpp"
-#include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
-
-using json = nlohmann::json;
 
 const std::string HTML_404_PAGE = R"html(
 <!DOCTYPE html>
@@ -80,13 +78,6 @@ const std::string HTML_404_PAGE = R"html(
 </html>
 )html";
 
-std::string json_body(const HttpResponse &res, const std::string &body) {
-  json json_body = {{"status_code", res.get_status_code()},
-                    {"status_message", res.get_status_message()},
-                    {"error", body}};
-  return json_body.dump();
-}
-
 HttpResponse HttpResponseBuilder::ok(const std::string &body) {
   HttpResponse res;
   res.set_protocol_version(
@@ -133,7 +124,8 @@ HttpResponse HttpResponseBuilder::bad_request(const std::string &body) {
   res.set_status_line(res.get_protocol_version() + " " + res.get_status_code() +
                       " " + res.get_status_message());
   res.set_header("Content-Type", "application/json, charset=utf-8");
-  res.set_body(json_body(res, body));
+  res.set_body(Json::json_body(
+      HttpResponseStatusCode(HttpResponseStatusCodeEnum::BAD_REQUEST), body));
   res.set_header("Content-Length", std::to_string(res.get_body().size()));
   return res;
 }
@@ -151,7 +143,7 @@ HttpResponseBuilder::internal_server_error(const std::string &body) {
   res.set_status_line(res.get_protocol_version() + " " + res.get_status_code() +
                       " " + res.get_status_message());
   res.set_header("Content-Type", "text/plain; charset=utf-8");
-  res.set_body(json_body(res, body));
+  res.set_body(Json::json_body(res.get_status_code(), body));
   res.set_header("Content-Length", std::to_string(res.get_body().size()));
   return res;
 }

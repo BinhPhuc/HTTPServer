@@ -1,10 +1,10 @@
 #pragma once
 
+#include "handler/request/BaseReader.hpp"
 #include <openssl/err.h>
 #include <string>
 
-class HttpsRequestReader {
+class HttpsRequestReader : public BaseReader {
 public:
-  static int get_content_length(const std::string &headers);
   static std::string read_request(SSL *ssl);
 };

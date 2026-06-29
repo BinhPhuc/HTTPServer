@@ -1,9 +1,9 @@
 #pragma once
 
+#include "handler/request/BaseReader.hpp"
 #include <string>
 
-class HttpRequestReader {
+class HttpRequestReader : public BaseReader {
 public:
-  static int get_content_length(const std::string &headers);
   static std::string read_request(int sockfd);
 };
