@@ -5,14 +5,16 @@ enum class HttpResponseStatusCodeEnum {
   OK,
   NOT_FOUND,
   BAD_REQUEST,
-  INTERNAL_SERVER_ERROR
+  INTERNAL_SERVER_ERROR,
+  CONTENT_TOO_LARGE
 };
 
 enum class HttpResponseStatusMessageEnum {
   OK,
   NOT_FOUND,
   BAD_REQUEST,
-  INTERNAL_SERVER_ERROR
+  INTERNAL_SERVER_ERROR,
+  CONTENT_TOO_LARGE
 };
 
 enum class HttpResponseProtocolVersionEnum {

@@ -10,6 +10,8 @@ std::string HttpResponseStatusMessage(HttpResponseStatusMessageEnum status) {
     return "Bad Request";
   case HttpResponseStatusMessageEnum::INTERNAL_SERVER_ERROR:
     return "Internal Server Error";
+  case HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE:
+    return "Content Too Large";
   default:
     return "Unknown Status";
   }
@@ -60,6 +62,8 @@ std::string HttpResponseStatusCode(HttpResponseStatusCodeEnum code) {
     return "400";
   case HttpResponseStatusCodeEnum::INTERNAL_SERVER_ERROR:
     return "500";
+  case HttpResponseStatusCodeEnum::CONTENT_TOO_LARGE:
+    return "413";
   default:
     return "Unknown Status Code";
   }

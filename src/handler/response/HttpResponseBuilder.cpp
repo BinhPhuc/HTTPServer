@@ -123,7 +123,7 @@ HttpResponse HttpResponseBuilder::bad_request(const std::string &body) {
       HttpResponseStatusMessage(HttpResponseStatusMessageEnum::BAD_REQUEST));
   res.set_status_line(res.get_protocol_version() + " " + res.get_status_code() +
                       " " + res.get_status_message());
-  res.set_header("Content-Type", "application/json, charset=utf-8");
+  res.set_header("Content-Type", "application/json; charset=utf-8");
   res.set_body(Json::json_body(
       HttpResponseStatusCode(HttpResponseStatusCodeEnum::BAD_REQUEST), body));
   res.set_header("Content-Length", std::to_string(res.get_body().size()));
@@ -142,7 +142,24 @@ HttpResponseBuilder::internal_server_error(const std::string &body) {
       HttpResponseStatusMessageEnum::INTERNAL_SERVER_ERROR));
   res.set_status_line(res.get_protocol_version() + " " + res.get_status_code() +
                       " " + res.get_status_message());
-  res.set_header("Content-Type", "text/plain; charset=utf-8");
+  res.set_header("Content-Type", "application/json; charset=utf-8");
+  res.set_body(Json::json_body(res.get_status_code(), body));
+  res.set_header("Content-Length", std::to_string(res.get_body().size()));
+  return res;
+}
+
+HttpResponse HttpResponseBuilder::content_too_large(const std::string &body) {
+  HttpResponse res;
+  res.set_protocol_version(
+      HttpResponseProtocolVersion(HttpResponseProtocolVersionEnum(
+          HttpResponseProtocolVersionEnum::HTTP_1_1)));
+  res.set_status_code(
+      HttpResponseStatusCode(HttpResponseStatusCodeEnum::CONTENT_TOO_LARGE));
+  res.set_status_message(HttpResponseStatusMessage(
+      HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE));
+  res.set_status_line(res.get_protocol_version() + " " + res.get_status_code() +
+                      " " + res.get_status_message());
+  res.set_header("Content-Type", "application/json; charset=utf-8");
   res.set_body(Json::json_body(res.get_status_code(), body));
   res.set_header("Content-Length", std::to_string(res.get_body().size()));
   return res;

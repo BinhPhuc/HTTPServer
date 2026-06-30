@@ -1,3 +1,4 @@
+#include "enum/HttpEnum.hpp"
 #include "handler/request/HttpRequestParser.hpp"
 #include "handler/request/HttpRequestReader.hpp"
 #include "handler/request/HttpsRequestReader.hpp"
@@ -15,6 +16,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <handler/json/Json.hpp>
 #include <model/User.hpp>
 #include <netdb.h>
 #include <network/Server.hpp>
@@ -22,6 +24,7 @@
 #include <sstream>
 #include <string>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <thread>
 #include <unistd.h>
@@ -84,6 +87,21 @@ int socket_listen(int sockfd, int backlog) {
     spdlog::error("Listen error: {}", strerror(errno));
   }
   return status;
+}
+
+void close_connection(SSL *ssl, int fd, bool drain_input) {
+  if (drain_input) {
+    struct timeval tv;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    char sink[4096];
+    while (SSL_read(ssl, sink, sizeof(sink)) > 0) {
+    }
+  }
+  SSL_shutdown(ssl); 
+  close(fd);      
 }
 
 void Server::start() {
@@ -161,6 +179,45 @@ void Server::start() {
 
         std::string raw_request = HttpsRequestReader::read_request(ssl.get());
 
+        auto handle_error_from_request =
+            [new_fd, ssl = ssl.get()](const std::string &error_message,
+                                      const HttpResponse &response) {
+              spdlog::error("{} from connection {}", error_message, new_fd);
+              std::string response_str =
+                  HttpResponseBuilder::build_response(response);
+              if (HttpsResponseSender::send_all(ssl, response_str.c_str(),
+                                                response_str.size()) == -1) {
+                spdlog::error("Send error: {}", strerror(errno));
+              }
+              close_connection(ssl, new_fd, true);
+            };
+
+        if (raw_request ==
+            HttpResponseStatusMessage(
+                HttpResponseStatusMessageEnum::INTERNAL_SERVER_ERROR)) {
+          HttpResponse response = HttpResponseBuilder::internal_server_error(
+              "Error reading request");
+          handle_error_from_request("Error reading request", response);
+          return;
+        }
+
+        if (raw_request ==
+            HttpResponseStatusMessage(
+                HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE)) {
+          HttpResponse response =
+              HttpResponseBuilder::content_too_large("Request too large");
+          handle_error_from_request("Request too large", response);
+          return;
+        }
+
+        if (raw_request == HttpResponseStatusMessage(
+                               HttpResponseStatusMessageEnum::BAD_REQUEST)) {
+          HttpResponse response =
+              HttpResponseBuilder::bad_request("Bad request");
+          handle_error_from_request("Bad request", response);
+          return;
+        }
+
         HttpRequest request = HttpRequestParser::parse(raw_request);
 
         oss.str("");
@@ -176,7 +233,7 @@ void Server::start() {
                                           response_str.size()) == -1) {
           spdlog::error("Send error: {}", strerror(errno));
         }
-        close(new_fd);
+        close_connection(ssl.get(), new_fd, false);
       } catch (const std::exception &e) {
         spdlog::error("Exception in connection handler: {}", e.what());
         close(new_fd);

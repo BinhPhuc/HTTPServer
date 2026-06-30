@@ -32,7 +32,14 @@ HttpResponse ApiRouter::dispatch(const HttpRequest &request) {
   }
   std::pair<HttpResponse, bool> static_response =
       handle_get_static_file_request(request);
-  if (static_response.second) {
+  if (!static_response.second &&
+      static_response.first.get_status_code() !=
+          HttpResponseStatusCode(HttpResponseStatusCodeEnum::OK)) {
+    return static_response.first;
+  }
+  if (static_response.second &&
+      static_response.first.get_status_code() ==
+          HttpResponseStatusCode(HttpResponseStatusCodeEnum::OK)) {
     return static_response.first;
   }
   return handle_api_request(request);
@@ -48,10 +55,14 @@ HttpResponse ApiRouter::handle_api_request(const HttpRequest &request) {
   }
 }
 
-std::string from_file_to_byte(const std::string &file_path) {
+std::string from_file_to_byte(const std::filesystem::path &file_path) {
+  if (std::filesystem::is_directory(file_path)) {
+    spdlog::error("File is a directory: {}", file_path.string());
+    return FileStatusMessage(FileStatusEnum::IS_DIRECTORY);
+  }
   std::ifstream file(file_path, std::ios::binary);
   if (!file) {
-    spdlog::error("File not found: {}", file_path);
+    spdlog::error("File not found: {}", file_path.string());
     return FileStatusMessage(FileStatusEnum::NOT_FOUND);
   }
   std::string content((std::istreambuf_iterator<char>(file)),
@@ -106,9 +117,22 @@ ApiRouter::handle_get_static_file_request(const HttpRequest &request) {
   std::stringstream ss;
   ss << root_path.string() << "/" << m_root_folder << resource_path;
   std::string file_path = ss.str();
-  std::string content = from_file_to_byte(file_path);
+  std::filesystem::path result_path =
+      std::filesystem::weakly_canonical(file_path);
+  if (result_path.string().find(root_path.string() + "/" + m_root_folder) !=
+      0) {
+    spdlog::error("Static file request outside of root folder: {}",
+                  result_path.string());
+    res = HttpResponseBuilder::bad_request("Invalid file path");
+    find_out = false;
+    return std::make_pair(res, find_out);
+  }
+  std::string content = from_file_to_byte(result_path);
   if (content == FileStatusMessage(FileStatusEnum::NOT_FOUND)) {
     res = HttpResponseBuilder::not_found();
+    find_out = false;
+  } else if (content == FileStatusMessage(FileStatusEnum::IS_DIRECTORY)) {
+    res = HttpResponseBuilder::bad_request("File is a directory");
     find_out = false;
   } else {
     res = HttpResponseBuilder::ok(content);
@@ -148,6 +172,8 @@ ApiRouter::handle_upload_static_file_request(const HttpRequest &request) {
       size_t filename_end = part.find("\"", filename_start);
       std::string filename =
           part.substr(filename_start, filename_end - filename_start);
+      // nomarlize filename to avoid directory traversal attacks
+      filename = std::filesystem::path(filename).filename().string();
       // random filename to avoid overwrite
       filename = std::to_string(std::time(nullptr)) + "_" + filename;
       size_t content_start = part.find("\r\n\r\n", filename_end);
