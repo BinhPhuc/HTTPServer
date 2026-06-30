@@ -100,8 +100,8 @@ void close_connection(SSL *ssl, int fd, bool drain_input) {
     while (SSL_read(ssl, sink, sizeof(sink)) > 0) {
     }
   }
-  SSL_shutdown(ssl); 
-  close(fd);      
+  SSL_shutdown(ssl);
+  close(fd);
 }
 
 void Server::start() {

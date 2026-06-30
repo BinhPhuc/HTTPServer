@@ -2,6 +2,7 @@
 #include "utils/Constants.hpp"
 #include <handler/request/HttpsRequestReader.hpp>
 #include <openssl/ssl.h>
+#include <spdlog/spdlog.h>
 #include <string>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -27,6 +28,7 @@ std::string HttpsRequestReader::read_request(SSL *ssl) {
   }
   std::string headers = buffer.substr(0, header_end + 4);
   int content_length = get_content_length(headers);
+  spdlog::info("Content-Length: {}", content_length);
   bool is_multipart = is_multipart_request(headers);
   if (is_multipart) {
     if (content_length > config::MAX_UPLOAD_SIZE) {
@@ -45,7 +47,11 @@ std::string HttpsRequestReader::read_request(SSL *ssl) {
   }
   size_t total_length = header_end + 4 + static_cast<size_t>(content_length);
   while (buffer.length() < total_length) {
-    if (buffer.length() >= config::MAX_BODY_SIZE) {
+    if (is_multipart && buffer.length() >= config::MAX_UPLOAD_SIZE) {
+      return HttpResponseStatusMessage(
+          HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE);
+    }
+    if (!is_multipart && buffer.length() >= config::MAX_BODY_SIZE) {
       return HttpResponseStatusMessage(
           HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE);
     }

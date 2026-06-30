@@ -52,7 +52,11 @@ std::string HttpRequestReader::read_request(int sockfd) {
 
   // Read the remaining body if any
   while (buffer.length() < total_length) {
-    if (buffer.length() >= config::MAX_BODY_SIZE) {
+    if (is_multipart && buffer.length() >= config::MAX_UPLOAD_SIZE) {
+      return HttpResponseStatusMessage(
+          HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE);
+    }
+    if (!is_multipart && buffer.length() >= config::MAX_BODY_SIZE) {
       return HttpResponseStatusMessage(
           HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE);
     }
