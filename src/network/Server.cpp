@@ -10,7 +10,6 @@
 #include "network/ApiRouter.hpp"
 #include "tls/TLS.hpp"
 #include "utils/Constants.hpp"
-#include <asm-generic/socket.h>
 #include <cerrno>
 #include <cstddef>
 #include <cstdio>

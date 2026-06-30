@@ -28,7 +28,6 @@ std::string HttpsRequestReader::read_request(SSL *ssl) {
   }
   std::string headers = buffer.substr(0, header_end + 4);
   int content_length = get_content_length(headers);
-  spdlog::info("Content-Length: {}", content_length);
   bool is_multipart = is_multipart_request(headers);
   if (is_multipart) {
     if (content_length > config::MAX_UPLOAD_SIZE) {
