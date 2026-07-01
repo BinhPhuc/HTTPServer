@@ -1,10 +1,11 @@
 #include <algorithm>
 #include <cctype>
 #include <http/HttpRequest.hpp>
+#include <utility>
 
 HttpRequest::HttpRequest()
-    : m_request_line(), m_path_only(), m_method(), m_path(), m_version(), m_headers(),
-      m_body() {}
+    : m_request_line(), m_path_only(), m_method(), m_path(), m_version(),
+      m_headers(), m_body() {}
 
 HttpRequest::~HttpRequest() { m_headers.clear(); }
 
@@ -56,9 +57,15 @@ HttpRequest::get_headers(const std::string &key) const {
   std::transform(normalized_key.begin(), normalized_key.end(),
                  normalized_key.begin(),
                  [](unsigned char c) { return std::tolower(c); });
-  return get_headers().at(normalized_key);
+  auto it = m_headers.find(normalized_key);
+  if (it == m_headers.end()) {
+    return {};
+  }
+  return it->second;
 }
 
 void HttpRequest::set_body(const std::string &body) { m_body = body; }
 
-std::string HttpRequest::get_body() const { return m_body; }
+void HttpRequest::set_body(std::string &&body) { m_body = std::move(body); }
+
+const std::string &HttpRequest::get_body() const { return m_body; }

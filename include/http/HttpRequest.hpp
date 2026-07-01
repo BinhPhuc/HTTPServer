@@ -31,7 +31,8 @@ public:
   std::vector<std::string> get_headers(const std::string &key) const;
 
   void set_body(const std::string &body);
-  std::string get_body() const;
+  void set_body(std::string &&body);
+  const std::string &get_body() const;
 
 private:
   std::string m_request_line; // 3 fields: method, path, version separated by sp

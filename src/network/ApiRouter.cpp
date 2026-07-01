@@ -10,6 +10,7 @@
 #include <iostream>
 #include <spdlog/spdlog.h>
 #include <sstream>
+#include <string_view>
 #include <sys/socket.h>
 
 ApiRouter::ApiRouter() : m_routes(), m_root_folder() {}
@@ -159,29 +160,34 @@ ApiRouter::handle_upload_static_file_request(const HttpRequest &request) {
     return HttpResponseBuilder::bad_request(
         "Content-Type must be multipart/form-data with a boundary");
   }
-  std::string body = request.get_body();
-  while (body.find(boundary) != std::string::npos) {
-    size_t start = body.find(boundary);
-    size_t end = body.find(boundary, start + boundary.length());
-    if (end == std::string::npos) {
+  const std::string &body = request.get_body();
+  std::string_view body_view(body);
+  size_t search_pos = 0;
+  while (true) {
+    size_t start = body_view.find(boundary, search_pos);
+    if (start == std::string_view::npos) {
       break;
     }
-    std::string part =
-        body.substr(start + boundary.length(), end - start - boundary.length());
+    size_t end = body_view.find(boundary, start + boundary.length());
+    if (end == std::string_view::npos) {
+      break;
+    }
+    std::string_view part = body_view.substr(start + boundary.length(),
+                                             end - start - boundary.length());
     size_t filename_pos = part.find("filename=\"");
-    if (filename_pos != std::string::npos) {
+    if (filename_pos != std::string_view::npos) {
       size_t filename_start = filename_pos + 10;
       size_t filename_end = part.find("\"", filename_start);
-      std::string filename =
-          part.substr(filename_start, filename_end - filename_start);
+      std::string filename(
+          part.substr(filename_start, filename_end - filename_start));
       // nomarlize filename to avoid directory traversal attacks
       filename = std::filesystem::path(filename).filename().string();
       // random filename to avoid overwrite
       filename = std::to_string(std::time(nullptr)) + "_" + filename;
       size_t content_start = part.find("\r\n\r\n", filename_end);
-      if (content_start != std::string::npos) {
+      if (content_start != std::string_view::npos) {
         content_start += 4; // Skip the \r\n\r\n
-        std::string file_content =
+        std::string_view file_content =
             part.substr(content_start, part.length() - content_start - 2);
         std::filesystem::path root_path =
             std::filesystem::path(PROJECT_ROOT_DIR);
@@ -189,11 +195,12 @@ ApiRouter::handle_upload_static_file_request(const HttpRequest &request) {
         ss << root_path.string() << "/" << m_root_folder << "/" << filename;
         std::string file_path = ss.str();
         std::ofstream outfile(file_path, std::ios::binary);
-        outfile.write(file_content.c_str(), (int)file_content.size());
+        outfile.write(file_content.data(),
+                      static_cast<std::streamsize>(file_content.size()));
         outfile.close();
       }
     }
-    body.erase(0, end);
+    search_pos = end;
   }
   std::string json_body =
       Json::json_body(HttpResponseStatusCode(HttpResponseStatusCodeEnum::OK),
