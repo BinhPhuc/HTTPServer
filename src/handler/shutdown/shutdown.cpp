@@ -3,6 +3,9 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+std::atomic<bool> ShutdownHandler::running{true};
+std::atomic<int> ShutdownHandler::listen_fd{-1};
+
 void ShutdownHandler::close_connection(SSL *ssl, int fd, bool drain_input) {
   if (drain_input) {
     struct timeval tv;
@@ -18,4 +21,10 @@ void ShutdownHandler::close_connection(SSL *ssl, int fd, bool drain_input) {
   close(fd);
 }
 
-void ShutdownHandler::signal_handler(int signum) { exit(signum); }
+void ShutdownHandler::signal_handler(int signum) {
+  running.store(false);
+  int fd = listen_fd.load();
+  if (fd != -1) {
+    ::shutdown(fd, SHUT_RDWR);
+  }
+}

@@ -101,7 +101,6 @@ void Server::start() {
 
   struct addrinfo *p;
   for (p = res; p != NULL; p = p->ai_next) {
-    // create socket
     m_sockfd = create_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 
     if (set_sock_option(m_sockfd, SOL_SOCKET, SO_REUSEADDR) == -1) {
@@ -109,13 +108,12 @@ void Server::start() {
       continue;
     }
 
-    // bind
     if (bind_socket(m_sockfd, p->ai_addr, p->ai_addrlen) == -1) {
       close(m_sockfd);
       continue;
     }
 
-    break; // bind success
+    break;
   }
 
   freeaddrinfo(res);
@@ -125,7 +123,6 @@ void Server::start() {
     return;
   }
 
-  // listen
   if (socket_listen(m_sockfd, config::MAX_CONNECTIONS) == -1) {
     close(m_sockfd);
     return;
@@ -133,13 +130,17 @@ void Server::start() {
 
   spdlog::info("Server started on port {}.", m_port);
 
+  ShutdownHandler::listen_fd.store(m_sockfd);
+
   struct sockaddr_storage their_addr;
 
-  while (1) {
-    // accept connections
+  while (ShutdownHandler::running.load()) {
     socklen_t addr_size = sizeof(their_addr);
     int new_fd = accept(m_sockfd, (struct sockaddr *)&their_addr, &addr_size);
     if (new_fd == -1) {
+      if (!ShutdownHandler::running.load()) {
+        break;
+      }
       spdlog::error("Accept error: {}", strerror(errno));
       continue;
     }
