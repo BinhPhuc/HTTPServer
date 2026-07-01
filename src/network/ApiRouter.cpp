@@ -32,37 +32,39 @@ HttpResponse ApiRouter::dispatch(const HttpRequest &request) {
   }
   std::pair<HttpResponse, bool> static_response =
       handle_get_static_file_request(request);
-  if (!static_response.second &&
-      static_response.first.get_status_code() !=
-          HttpResponseStatusCode(HttpResponseStatusCodeEnum::OK)) {
-    return static_response.first;
+
+  if (!static_response.second) {
+    std::pair<HttpResponse, bool> api_response = handle_api_request(request);
+    if (!api_response.second) {
+      return HttpResponseBuilder::not_found();
+    }
+    return api_response.first;
   }
-  if (static_response.second &&
-      static_response.first.get_status_code() ==
-          HttpResponseStatusCode(HttpResponseStatusCodeEnum::OK)) {
-    return static_response.first;
-  }
-  return handle_api_request(request);
+
+  return static_response.first;
 }
 
-HttpResponse ApiRouter::handle_api_request(const HttpRequest &request) {
+std::pair<HttpResponse, bool>
+ApiRouter::handle_api_request(const HttpRequest &request) {
   std::string key = request.get_method() + " " + request.get_path_only();
   auto it = m_routes.find(key);
   if (it != m_routes.end()) {
-    return it->second(request);
+    return std::make_pair(it->second(request), true);
   } else {
-    return HttpResponseBuilder::not_found();
+    return std::make_pair(HttpResponseBuilder::not_found(), false);
   }
 }
 
 std::string from_file_to_byte(const std::filesystem::path &file_path) {
   if (std::filesystem::is_directory(file_path)) {
-    spdlog::error("File is a directory: {}", file_path.string());
+    spdlog::warn("File is a directory: {}, or maybe it is an api request",
+                 file_path.string());
     return FileStatusMessage(FileStatusEnum::IS_DIRECTORY);
   }
   std::ifstream file(file_path, std::ios::binary);
   if (!file) {
-    spdlog::error("File not found: {}", file_path.string());
+    spdlog::warn("File not found: {}, maybe it is an api request",
+                 file_path.string());
     return FileStatusMessage(FileStatusEnum::NOT_FOUND);
   }
   std::string content((std::istreambuf_iterator<char>(file)),

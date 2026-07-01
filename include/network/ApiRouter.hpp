@@ -21,5 +21,5 @@ private:
   std::pair<HttpResponse, bool>
   handle_get_static_file_request(const HttpRequest &request);
   HttpResponse handle_upload_static_file_request(const HttpRequest &request);
-  HttpResponse handle_api_request(const HttpRequest &request);
+  std::pair<HttpResponse, bool> handle_api_request(const HttpRequest &request);
 };
