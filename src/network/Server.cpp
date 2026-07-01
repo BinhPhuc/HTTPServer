@@ -5,6 +5,7 @@
 #include "handler/response/HttpResponseBuilder.hpp"
 #include "handler/response/HttpResponseSender.hpp"
 #include "handler/response/HttpsResponseSender.hpp"
+#include "handler/shutdown/shutdown.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
 #include "network/ApiRouter.hpp"
@@ -29,8 +30,8 @@
 #include <unistd.h>
 
 Server::Server(int port, ApiRouter &api_router)
-    : m_port(port), m_sockfd(-1), m_api_router(api_router), thread_pool(),
-      m_ctx(TLS::create_context()) {
+    : m_port(port), m_sockfd(-1), m_api_router(api_router),
+      m_ctx(TLS::create_context()), thread_pool() {
   TLS::configure_context(m_ctx.get());
 }
 
@@ -88,21 +89,6 @@ int socket_listen(int sockfd, int backlog) {
   return status;
 }
 
-void close_connection(SSL *ssl, int fd, bool drain_input) {
-  if (drain_input) {
-    struct timeval tv;
-    tv.tv_sec = 1;
-    tv.tv_usec = 0;
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
-    char sink[4096];
-    while (SSL_read(ssl, sink, sizeof(sink)) > 0) {
-    }
-  }
-  SSL_shutdown(ssl);
-  close(fd);
-}
-
 void Server::start() {
   // getaddrinfo -> get socket fd -> bind -> listen -> accept
   struct addrinfo hints, *res;
@@ -148,6 +134,7 @@ void Server::start() {
   spdlog::info("Server started on port {}.", m_port);
 
   struct sockaddr_storage their_addr;
+
   while (1) {
     // accept connections
     socklen_t addr_size = sizeof(their_addr);
@@ -188,7 +175,7 @@ void Server::start() {
                                                 response_str.size()) == -1) {
                 spdlog::error("Send error: {}", strerror(errno));
               }
-              close_connection(ssl, new_fd, true);
+              ShutdownHandler::close_connection(ssl, new_fd, true);
             };
 
         if (raw_request ==
@@ -233,7 +220,7 @@ void Server::start() {
                                           response_str.size()) == -1) {
           spdlog::error("Send error: {}", strerror(errno));
         }
-        close_connection(ssl.get(), new_fd, false);
+        ShutdownHandler::close_connection(ssl.get(), new_fd, false);
       } catch (const std::exception &e) {
         spdlog::error("Exception in connection handler: {}", e.what());
         close(new_fd);

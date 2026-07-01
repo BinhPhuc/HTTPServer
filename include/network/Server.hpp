@@ -11,8 +11,8 @@ private:
   int m_sockfd;
   void stopServer();
   ApiRouter &m_api_router;
-  ThreadPool thread_pool;
   SSL_CTX_ptr m_ctx;
+  ThreadPool thread_pool;
 
 public:
   Server(int port, ApiRouter &api_router);
