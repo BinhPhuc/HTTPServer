@@ -3,7 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 class Json {
 public:

@@ -119,8 +119,8 @@ ApiRouter::handle_get_static_file_request(const HttpRequest &request) {
   std::string file_path = ss.str();
   std::filesystem::path result_path =
       std::filesystem::weakly_canonical(file_path);
-  if (result_path.string().find(root_path.string() + "/" + m_root_folder) !=
-      0) {
+  if (result_path.string().find(root_path.string() + "/" + m_root_folder +
+                                "/") != 0) {
     spdlog::error("Static file request outside of root folder: {}",
                   result_path.string());
     res = HttpResponseBuilder::bad_request("Invalid file path");

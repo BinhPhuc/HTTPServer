@@ -28,21 +28,21 @@ std::string HttpsRequestReader::read_request(SSL *ssl) {
   }
   std::string headers = buffer.substr(0, header_end + 4);
   int content_length = get_content_length(headers);
-  bool is_multipart = is_multipart_request(headers);
+  bool is_multipart = is_multipart_request(headers); // POST request
   if (is_multipart) {
     if (content_length > config::MAX_UPLOAD_SIZE) {
       return HttpResponseStatusMessage(
           HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE);
+    }
+    if (content_length <= 0) {
+      return HttpResponseStatusMessage(
+          HttpResponseStatusMessageEnum::BAD_REQUEST);
     }
   } else {
     if (content_length > config::MAX_BODY_SIZE) {
       return HttpResponseStatusMessage(
           HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE);
     }
-  }
-  if (content_length <= 0) {
-    return HttpResponseStatusMessage(
-        HttpResponseStatusMessageEnum::BAD_REQUEST);
   }
   size_t total_length = header_end + 4 + static_cast<size_t>(content_length);
   while (buffer.length() < total_length) {

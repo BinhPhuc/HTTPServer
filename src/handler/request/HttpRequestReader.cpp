@@ -38,15 +38,15 @@ std::string HttpRequestReader::read_request(int sockfd) {
       return HttpResponseStatusMessage(
           HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE);
     }
+    if (content_length <= 0) {
+      return HttpResponseStatusMessage(
+          HttpResponseStatusMessageEnum::BAD_REQUEST);
+    }
   } else {
     if (content_length > config::MAX_BODY_SIZE) {
       return HttpResponseStatusMessage(
           HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE);
     }
-  }
-  if (content_length <= 0) {
-    return HttpResponseStatusMessage(
-        HttpResponseStatusMessageEnum::BAD_REQUEST);
   }
   size_t total_length = header_end + 4 + static_cast<size_t>(content_length);
 

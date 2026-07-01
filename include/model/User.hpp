@@ -1,4 +1,5 @@
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 #include <string>
 
 class User {
@@ -17,11 +18,11 @@ public:
   std::string email;
 };
 
-inline void to_json(nlohmann::json &j, const User &u) {
+inline void to_json(nlohmann::ordered_json &j, const User &u) {
   j = nlohmann::json{{"id", u.id}, {"name", u.name}, {"email", u.email}};
 }
 
-inline void from_json(const nlohmann::json &j, User &u) {
+inline void from_json(const nlohmann::ordered_json &j, User &u) {
   j.at("id").get_to(u.id);
   j.at("name").get_to(u.name);
   j.at("email").get_to(u.email);

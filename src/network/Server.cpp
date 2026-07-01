@@ -203,9 +203,10 @@ void Server::start() {
         if (raw_request ==
             HttpResponseStatusMessage(
                 HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE)) {
-          HttpResponse response =
-              HttpResponseBuilder::content_too_large("Request too large");
-          handle_error_from_request("Request too large", response);
+          HttpResponse response = HttpResponseBuilder::content_too_large(
+              "Exceeded maximum upload size (10MB)");
+          handle_error_from_request("Exceeded maximum upload size (10MB)",
+                                    response);
           return;
         }
 
