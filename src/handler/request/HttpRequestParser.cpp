@@ -56,6 +56,10 @@ HttpRequestParser::parse(const std::string &raw_request) {
     pos = line_end + 2;
   }
 
+  if (request.get_header("Host").empty()) {
+    return std::make_pair(request, false);
+  }
+
   if (pos < raw_request.size()) {
     request.set_body(raw_request.substr(pos));
   }

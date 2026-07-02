@@ -17,7 +17,7 @@ enum class HttpResponseStatusMessageEnum {
   CONTENT_TOO_LARGE
 };
 
-enum class HttpResponseProtocolVersionEnum {
+enum class HttpProtocolVersionEnum {
   HTTP_1_0,
   HTTP_1_1,
   HTTP_2_0,
@@ -27,6 +27,6 @@ enum class HttpMethodEnum { GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD };
 
 std::string HttpResponseStatusMessage(HttpResponseStatusMessageEnum status);
 std::string
-HttpResponseProtocolVersion(HttpResponseProtocolVersionEnum version);
+HttpProtocolVersion(HttpProtocolVersionEnum version);
 std::string HttpResponseStatusCode(HttpResponseStatusCodeEnum code);
 std::string HttpMethod(HttpMethodEnum method);

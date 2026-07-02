@@ -1,13 +1,12 @@
-#include <algorithm>
-#include <cctype>
 #include <http/HttpRequest.hpp>
 #include <utility>
+#include <utils/Helper.hpp>
 
 HttpRequest::HttpRequest()
     : m_request_line(), m_path_only(), m_method(), m_path(), m_version(),
-      m_headers(), m_body() {}
+      m_header(), m_body() {}
 
-HttpRequest::~HttpRequest() { m_headers.clear(); }
+HttpRequest::~HttpRequest() { m_header.clear(); }
 
 void HttpRequest::set_request_line(const std::string &line) {
   m_request_line = line;
@@ -38,30 +37,19 @@ std::string HttpRequest::get_version() const { return m_version; }
 void HttpRequest::set_header(const std::string &key, const std::string &value) {
   // Because HTTP headers can have multiple values for the same key
   // (case-insensitive) Normalize to loowercase for consistent storage
-  std::string normalized_key = key;
-  std::transform(normalized_key.begin(), normalized_key.end(),
-                 normalized_key.begin(),
-                 [](unsigned char c) { return std::tolower(c); });
-  m_headers[normalized_key].push_back(value);
-}
-
-std::unordered_map<std::string, std::vector<std::string>>
-HttpRequest::get_headers() const {
-  return m_headers;
-}
-
-std::vector<std::string>
-HttpRequest::get_headers(const std::string &key) const {
-  // Also normalize the key to lowercase when retrieving
-  std::string normalized_key = key;
-  std::transform(normalized_key.begin(), normalized_key.end(),
-                 normalized_key.begin(),
-                 [](unsigned char c) { return std::tolower(c); });
-  auto it = m_headers.find(normalized_key);
-  if (it == m_headers.end()) {
-    return {};
+  std::string normalized_key = utils::lowercase(key);
+  auto it = m_header.find(normalized_key);
+  if (it == m_header.end()) {
+    m_header[normalized_key] = value;
+  } else {
+    it->second += ", " + value;
   }
-  return it->second;
+}
+
+std::string HttpRequest::get_header(const std::string &key) const {
+  std::string normalized_key = utils::lowercase(key);
+  auto it = m_header.find(normalized_key);
+  return it == m_header.end() ? "" : it->second;
 }
 
 void HttpRequest::set_body(const std::string &body) { m_body = body; }

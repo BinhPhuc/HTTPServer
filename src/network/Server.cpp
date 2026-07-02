@@ -1,3 +1,4 @@
+#include "enum/ConnectionState.hpp"
 #include "enum/HttpEnum.hpp"
 #include "handler/request/HttpRequestParser.hpp"
 #include "handler/request/HttpsRequestReader.hpp"
@@ -25,6 +26,7 @@
 #include <sys/types.h>
 #include <thread>
 #include <unistd.h>
+#include <utils/Helper.hpp>
 
 Server::Server(int port, ApiRouter &api_router)
     : m_port(port), m_sockfd(-1), m_api_router(api_router),
@@ -161,7 +163,17 @@ void Server::start() {
           return;
         }
 
-        std::string raw_request = HttpsRequestReader::read_request(ssl.get());
+        struct timeval timeout;
+
+        timeout.tv_sec = config::SOCKET_TIMEOUT;
+        timeout.tv_usec = 0;
+
+        if (setsockopt(new_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout,
+                       sizeof(timeout)) < 0) {
+          spdlog::error("setsockopt failed: {}", strerror(errno));
+          ShutdownHandler::close_connection(ssl.get(), new_fd, true);
+          return;
+        }
 
         auto handle_error_from_request =
             [new_fd, ssl = ssl.get()](const std::string &error_message,
@@ -176,55 +188,84 @@ void Server::start() {
               ShutdownHandler::close_connection(ssl, new_fd, true);
             };
 
-        if (raw_request ==
-            HttpResponseStatusMessage(
-                HttpResponseStatusMessageEnum::INTERNAL_SERVER_ERROR)) {
-          HttpResponse response = HttpResponseBuilder::internal_server_error(
-              "Error reading request");
-          handle_error_from_request("Error reading request", response);
-          return;
-        }
+        bool keep_alive = true;
 
-        if (raw_request ==
-            HttpResponseStatusMessage(
-                HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE)) {
-          HttpResponse response = HttpResponseBuilder::content_too_large(
-              "Exceeded maximum upload size (10MB)");
-          handle_error_from_request("Exceeded maximum upload size (10MB)",
-                                    response);
-          return;
-        }
+        while (keep_alive && ShutdownHandler::running.load()) {
+          std::string raw_request = HttpsRequestReader::read_request(ssl.get());
 
-        if (raw_request == HttpResponseStatusMessage(
-                               HttpResponseStatusMessageEnum::BAD_REQUEST)) {
-          HttpResponse response =
-              HttpResponseBuilder::bad_request("Bad request");
-          handle_error_from_request("Bad request", response);
-          return;
-        }
+          if (raw_request == ConnectionState(ConnectionStateEnum::ERROR)) {
+            HttpResponse response = HttpResponseBuilder::internal_server_error(
+                "Error reading request");
+            response.set_header("Connection", "close");
+            handle_error_from_request("Error reading request", response);
+            return;
+          }
 
-        auto [request, is_valid_request] =
-            HttpRequestParser::parse(raw_request);
+          if (raw_request == ConnectionState(ConnectionStateEnum::TOO_LARGE)) {
+            HttpResponse response = HttpResponseBuilder::content_too_large(
+                "Exceeded maximum upload size (10MB)");
+            response.set_header("Connection", "close");
+            handle_error_from_request("Exceeded maximum upload size (10MB)",
+                                      response);
+            return;
+          }
 
-        if (!is_valid_request) {
-          HttpResponse response =
-              HttpResponseBuilder::bad_request("Bad request");
-          handle_error_from_request("Bad request", response);
-          return;
-        }
+          if (raw_request == ConnectionState(ConnectionStateEnum::BAD)) {
+            HttpResponse response =
+                HttpResponseBuilder::bad_request("Bad request");
+            response.set_header("Connection", "close");
+            handle_error_from_request("Bad request", response);
+            return;
+          }
 
-        oss.str("");
-        oss << std::this_thread::get_id();
-        spdlog::info("Thread {} - {} {} {}", oss.str(), request.get_method(),
-                     request.get_path(), request.get_version());
+          if (raw_request == ConnectionState(ConnectionStateEnum::CLOSED) ||
+              raw_request == ConnectionState(ConnectionStateEnum::TIMEOUT)) {
+            spdlog::info("Connection {} closed by client or timed out", new_fd);
+            break;
+          }
 
-        HttpResponse response = m_api_router.dispatch(request);
-        std::string response_str =
-            HttpResponseBuilder::build_response(response);
+          auto [request, is_valid_request] =
+              HttpRequestParser::parse(raw_request);
 
-        if (HttpsResponseSender::send_all(ssl.get(), response_str.c_str(),
-                                          response_str.size()) == -1) {
-          spdlog::error("Send error: {}", strerror(errno));
+          if (!is_valid_request) {
+            HttpResponse response =
+                HttpResponseBuilder::bad_request("Bad request");
+            response.set_header("Connection", "close");
+            handle_error_from_request("Bad request", response);
+            return;
+          }
+
+          std::string connection_header = request.get_header("Connection");
+          std::string http_version = request.get_version();
+
+          keep_alive = (http_version ==
+                        HttpProtocolVersion(HttpProtocolVersionEnum::HTTP_1_1));
+
+          if (connection_header.empty()) {
+            connection_header = keep_alive ? "keep-alive" : "close";
+          } else {
+            connection_header = utils::lowercase(connection_header);
+            if (connection_header == "keep-alive") {
+              keep_alive = true;
+            } else if (connection_header == "close") {
+              keep_alive = false;
+            }
+          }
+
+          oss.str("");
+          oss << std::this_thread::get_id();
+          spdlog::info("Thread {} - {} {} {}", oss.str(), request.get_method(),
+                       request.get_path(), request.get_version());
+
+          HttpResponse response = m_api_router.dispatch(request);
+          response.set_header("Connection", connection_header);
+          std::string response_str =
+              HttpResponseBuilder::build_response(response);
+
+          if (HttpsResponseSender::send_all(ssl.get(), response_str.c_str(),
+                                            response_str.size()) == -1) {
+            spdlog::error("Send error: {}", strerror(errno));
+          }
         }
         ShutdownHandler::close_connection(ssl.get(), new_fd, false);
       } catch (const std::exception &e) {

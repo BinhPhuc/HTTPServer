@@ -18,13 +18,13 @@ std::string HttpResponseStatusMessage(HttpResponseStatusMessageEnum status) {
 }
 
 std::string
-HttpResponseProtocolVersion(HttpResponseProtocolVersionEnum version) {
+HttpProtocolVersion(HttpProtocolVersionEnum version) {
   switch (version) {
-  case HttpResponseProtocolVersionEnum::HTTP_1_0:
+  case HttpProtocolVersionEnum::HTTP_1_0:
     return "HTTP/1.0";
-  case HttpResponseProtocolVersionEnum::HTTP_1_1:
+  case HttpProtocolVersionEnum::HTTP_1_1:
     return "HTTP/1.1";
-  case HttpResponseProtocolVersionEnum::HTTP_2_0:
+  case HttpProtocolVersionEnum::HTTP_2_0:
     return "HTTP/2.0";
   default:
     return "Unknown Protocol Version";

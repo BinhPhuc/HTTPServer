@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 class HttpRequest {
 public:
@@ -27,8 +26,7 @@ public:
 
   void set_header(const std::string &key,
                   const std::string &value); // set mean add more headers
-  std::unordered_map<std::string, std::vector<std::string>> get_headers() const;
-  std::vector<std::string> get_headers(const std::string &key) const;
+  std::string get_header(const std::string &key) const;
 
   void set_body(const std::string &body);
   void set_body(std::string &&body);
@@ -40,6 +38,6 @@ private:
   std::string m_method;
   std::string m_path;
   std::string m_version;
-  std::unordered_map<std::string, std::vector<std::string>> m_headers;
+  std::unordered_map<std::string, std::string> m_header;
   std::string m_body;
 };

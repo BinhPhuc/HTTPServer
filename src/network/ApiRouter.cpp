@@ -149,14 +149,13 @@ ApiRouter::handle_get_static_file_request(const HttpRequest &request) {
 
 HttpResponse
 ApiRouter::handle_upload_static_file_request(const HttpRequest &request) {
-  std::vector<std::string> content_types = request.get_headers("Content-Type");
+  std::string content_type = request.get_header("Content-Type");
   std::string boundary = "";
-  for (const std::string &content_type : content_types) {
-    if (content_type.find("multipart/form-data") != std::string::npos) {
-      boundary = "--" + content_type.substr(content_type.find("boundary=") + 9);
-      break;
-    }
+
+  if (content_type.find("multipart/form-data") != std::string::npos) {
+    boundary = "--" + content_type.substr(content_type.find("boundary=") + 9);
   }
+
   if (boundary.empty()) {
     return HttpResponseBuilder::bad_request(
         "Content-Type must be multipart/form-data with a boundary");
