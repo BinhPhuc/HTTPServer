@@ -189,9 +189,10 @@ void Server::start() {
             };
 
         bool keep_alive = true;
+        HttpsRequestReader request_reader(ssl.get());
 
         while (keep_alive && ShutdownHandler::running.load()) {
-          std::string raw_request = HttpsRequestReader::read_request(ssl.get());
+          std::string raw_request = request_reader.read_request();
 
           if (raw_request == ConnectionState(ConnectionStateEnum::ERROR)) {
             HttpResponse response = HttpResponseBuilder::internal_server_error(

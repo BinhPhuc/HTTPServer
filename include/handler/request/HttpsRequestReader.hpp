@@ -6,5 +6,10 @@
 
 class HttpsRequestReader : public BaseReader {
 public:
-  static std::string read_request(SSL *ssl);
+  HttpsRequestReader(SSL *ssl);
+  std::string read_request();
+
+private:
+  SSL *ssl;
+  std::string m_buffer;
 };
