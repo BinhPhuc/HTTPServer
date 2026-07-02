@@ -3,6 +3,8 @@
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
 #include <functional>
+#include <utility>
+#include <vector>
 
 class ApiRouter {
 public:
@@ -20,5 +22,8 @@ private:
   HttpResponse
   handle_static_file_request(const HttpRequest &request,
                              const std::vector<std::string> &static_files);
-  HttpResponse handle_api_request(const HttpRequest &request);
+  std::pair<HttpResponse, bool>
+  handle_get_static_file_request(const HttpRequest &request);
+  HttpResponse handle_upload_static_file_request(const HttpRequest &request);
+  std::pair<HttpResponse, bool> handle_api_request(const HttpRequest &request);
 };

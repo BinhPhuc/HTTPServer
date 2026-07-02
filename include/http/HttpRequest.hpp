@@ -26,16 +26,17 @@ public:
   std::string get_version() const;
 
   void set_header(const std::string &key,
-                  const std::string &value); // set mean add more headers
+                  const std::string &value);
   std::unordered_map<std::string, std::vector<std::string>> get_headers() const;
   std::vector<std::string> get_headers(const std::string &key) const;
+  std::string get_header(const std::string &key) const;
 
   void set_body(const std::string &body);
   std::string get_body() const;
 
 private:
-  std::string m_request_line; // 3 fields: method, path, version separated by sp
-  std::string m_path_only;    // path without query string
+  std::string m_request_line;
+  std::string m_path_only;
   std::string m_method;
   std::string m_path;
   std::string m_version;

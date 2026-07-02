@@ -1,4 +1,5 @@
 #include "network/Server.hpp"
+#include "handler/shutdown/shutdown.hpp"
 #include "network/EpollEventHandler.hpp"
 #include "network/SocketHelper.hpp"
 #include "utils/Constants.hpp"
@@ -72,6 +73,8 @@ bool Server::initialize_socket() {
     return false;
   }
 
+  ShutdownHandler::listen_fd.store(m_sockfd);
+
   return true;
 }
 
@@ -100,10 +103,13 @@ void Server::run_event_loop() {
 
   spdlog::info("Server started on port {}.", m_port);
 
-  while (true) {
+  while (ShutdownHandler::running.load()) {
     int num_events = epoll_wait(m_epollfd, events, config::MAX_CONNECTIONS, -1);
 
     if (num_events == -1) {
+      if (errno == EINTR) {
+        continue;
+      }
       spdlog::error("Epoll wait error: {}", strerror(errno));
       break;
     }
@@ -112,6 +118,8 @@ void Server::run_event_loop() {
       event_handler.handle_event(events[i]);
     }
   }
+
+  spdlog::info("Event loop exited, shutting down gracefully.");
 }
 
 void Server::start() {

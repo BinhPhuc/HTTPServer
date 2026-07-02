@@ -1,23 +1,30 @@
 #include "config/LoggerConfig.hpp"
 #include "controller/UserController.hpp"
+#include "handler/shutdown/shutdown.hpp"
 #include "network/ApiRouter.hpp"
 #include "network/Server.hpp"
 #include "utils/Constants.hpp"
+#include <csignal>
 #include <spdlog/spdlog.h>
 
 int main() {
   logging::LoggerConfig::initialize(config::SERVER_LOG_PATH);
   spdlog::info("Server is starting...");
 
-  ApiRouter api_router;
-  api_router.set_root_folder(config::SERVER_ROOT_FOLDER);
+  std::signal(SIGINT, ShutdownHandler::signal_handler);
+  std::signal(SIGTERM, ShutdownHandler::signal_handler);
 
-  UserController user_controller;
-  user_controller.registerRoutes(api_router);
+  {
+    ApiRouter api_router;
+    api_router.set_root_folder(config::SERVER_ROOT_FOLDER);
 
-  Server server(8080, api_router);
-  server.start();
-  
+    UserController user_controller;
+    user_controller.registerRoutes(api_router);
+
+    Server server(config::PORT, api_router);
+    server.start();
+  }
+
   logging::LoggerConfig::shutdown();
   return 0;
 }

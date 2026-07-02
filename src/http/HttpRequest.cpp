@@ -35,8 +35,6 @@ void HttpRequest::set_version(const std::string &version) {
 std::string HttpRequest::get_version() const { return m_version; }
 
 void HttpRequest::set_header(const std::string &key, const std::string &value) {
-  // Because HTTP headers can have multiple values for the same key
-  // (case-insensitive) Normalize to loowercase for consistent storage
   std::string normalized_key = key;
   std::transform(normalized_key.begin(), normalized_key.end(),
                  normalized_key.begin(),
@@ -51,12 +49,30 @@ HttpRequest::get_headers() const {
 
 std::vector<std::string>
 HttpRequest::get_headers(const std::string &key) const {
-  // Also normalize the key to lowercase when retrieving
   std::string normalized_key = key;
   std::transform(normalized_key.begin(), normalized_key.end(),
                  normalized_key.begin(),
                  [](unsigned char c) { return std::tolower(c); });
   return get_headers().at(normalized_key);
+}
+
+std::string HttpRequest::get_header(const std::string &key) const {
+  std::string normalized_key = key;
+  std::transform(normalized_key.begin(), normalized_key.end(),
+                 normalized_key.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  auto it = m_headers.find(normalized_key);
+  if (it == m_headers.end()) {
+    return "";
+  }
+  std::string result;
+  for (const auto &value : it->second) {
+    if (!result.empty()) {
+      result += ", ";
+    }
+    result += value;
+  }
+  return result;
 }
 
 void HttpRequest::set_body(const std::string &body) { m_body = body; }

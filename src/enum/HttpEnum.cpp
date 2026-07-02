@@ -8,8 +8,33 @@ std::string HttpResponseStatusMessage(HttpResponseStatusMessageEnum status) {
     return "Not Found";
   case HttpResponseStatusMessageEnum::BAD_REQUEST:
     return "Bad Request";
+  case HttpResponseStatusMessageEnum::INTERNAL_SERVER_ERROR:
+    return "Internal Server Error";
+  case HttpResponseStatusMessageEnum::CONTENT_TOO_LARGE:
+    return "Content Too Large";
   default:
     return "Unknown Status";
+  }
+}
+
+std::string HttpMethod(HttpMethodEnum method) {
+  switch (method) {
+  case HttpMethodEnum::GET:
+    return "GET";
+  case HttpMethodEnum::POST:
+    return "POST";
+  case HttpMethodEnum::PUT:
+    return "PUT";
+  case HttpMethodEnum::DELETE:
+    return "DELETE";
+  case HttpMethodEnum::PATCH:
+    return "PATCH";
+  case HttpMethodEnum::OPTIONS:
+    return "OPTIONS";
+  case HttpMethodEnum::HEAD:
+    return "HEAD";
+  default:
+    return "Unknown Method";
   }
 }
 
@@ -35,6 +60,10 @@ std::string HttpResponseStatusCode(HttpResponseStatusCodeEnum code) {
     return "404";
   case HttpResponseStatusCodeEnum::BAD_REQUEST:
     return "400";
+  case HttpResponseStatusCodeEnum::INTERNAL_SERVER_ERROR:
+    return "500";
+  case HttpResponseStatusCodeEnum::CONTENT_TOO_LARGE:
+    return "413";
   default:
     return "Unknown Status Code";
   }

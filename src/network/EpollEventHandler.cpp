@@ -6,8 +6,10 @@
 #include "http/HttpResponse.hpp"
 #include "network/SocketHelper.hpp"
 #include "utils/Constants.hpp"
+#include "utils/Helper.hpp"
 #include <cerrno>
 #include <cstring>
+#include <exception>
 #include <fcntl.h>
 #include <spdlog/spdlog.h>
 #include <sys/epoll.h>
@@ -75,28 +77,42 @@ void EpollEventHandler::handle_read_event(int client_fd) {
     return;
   }
 
-  m_connections[client_fd].read_buffer.append(
-      buffer, static_cast<size_t>(bytes_received));
+  ConnectionState &conn = m_connections[client_fd];
+  conn.read_buffer.append(buffer, static_cast<size_t>(bytes_received));
 
-  if (is_request_complete(m_connections[client_fd].read_buffer)) {
-    std::string raw_request = m_connections[client_fd].read_buffer;
-    HttpRequest request = HttpRequestParser::parse(raw_request);
-    HttpResponse response = m_api_router.dispatch(request);
-    std::string response_str = HttpResponseBuilder::build_response(response);
-
-    m_connections[client_fd].write_buffer = response_str;
-    m_connections[client_fd].read_buffer.clear();
-    m_connections[client_fd].write_offset = 0;
-
-    struct epoll_event write_event;
-    write_event.events = EPOLLOUT;
-    write_event.data.fd = client_fd;
-
-    if (epoll_ctl(m_epollfd, EPOLL_CTL_MOD, client_fd, &write_event) == -1) {
-      spdlog::error("Epoll control error: {}", strerror(errno));
-      close_connection(client_fd);
-    }
+  HttpResponse error;
+  if (exceeds_size_limits(conn.read_buffer, error)) {
+    queue_response(client_fd, error, false);
+    return;
   }
+
+  if (!is_request_complete(conn.read_buffer)) {
+    return;
+  }
+
+  size_t header_end = conn.read_buffer.find("\r\n\r\n");
+  std::string headers = conn.read_buffer.substr(0, header_end + 4);
+  int content_length = HttpRequestReader::get_content_length(headers);
+  size_t total_length = header_end + 4 + static_cast<size_t>(content_length);
+  std::string raw_request = conn.read_buffer.substr(0, total_length);
+
+  HttpResponse response;
+  bool keep_alive = true;
+  try {
+    HttpRequest request = HttpRequestParser::parse(raw_request);
+    response = m_api_router.dispatch(request);
+    keep_alive = compute_keep_alive(request);
+    response.set_header("Connection", keep_alive ? "keep-alive" : "close");
+  } catch (const std::exception &e) {
+    spdlog::error("Error handling request on fd {}: {}", client_fd, e.what());
+    response =
+        HttpResponseBuilder::internal_server_error("Internal Server Error");
+    response.set_header("Connection", "close");
+    keep_alive = false;
+  }
+
+  conn.read_buffer.erase(0, total_length);
+  queue_response(client_fd, response, keep_alive);
 }
 
 void EpollEventHandler::handle_write_event(int client_fd) {
@@ -108,6 +124,9 @@ void EpollEventHandler::handle_write_event(int client_fd) {
       send(client_fd, response.data() + offset, response.size() - offset, 0);
 
   if (bytes_sent == -1) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      return;
+    }
     spdlog::error("Send error on fd {}: {}", client_fd, strerror(errno));
     close_connection(client_fd);
     return;
@@ -116,6 +135,14 @@ void EpollEventHandler::handle_write_event(int client_fd) {
   conn.write_offset += static_cast<size_t>(bytes_sent);
 
   if (conn.write_offset >= response.size()) {
+    if (!conn.keep_alive) {
+      close_connection(client_fd);
+      return;
+    }
+
+    conn.write_buffer.clear();
+    conn.write_offset = 0;
+
     struct epoll_event read_event;
     read_event.events = EPOLLIN;
     read_event.data.fd = client_fd;
@@ -149,4 +176,68 @@ bool EpollEventHandler::is_request_complete(const std::string &buffer) const {
   size_t total_length = header_end + 4 + static_cast<size_t>(content_length);
 
   return buffer.length() >= total_length;
+}
+
+bool EpollEventHandler::exceeds_size_limits(const std::string &buffer,
+                                            HttpResponse &error) const {
+  size_t header_end = buffer.find("\r\n\r\n");
+  if (header_end == std::string::npos) {
+    if (buffer.size() > static_cast<size_t>(config::MAX_HEADER_SIZE)) {
+      error = HttpResponseBuilder::bad_request("Request header too large");
+      return true;
+    }
+    return false;
+  }
+
+  std::string headers = buffer.substr(0, header_end + 4);
+  if (headers.size() > static_cast<size_t>(config::MAX_HEADER_SIZE)) {
+    error = HttpResponseBuilder::bad_request("Request header too large");
+    return true;
+  }
+
+  int content_length = HttpRequestReader::get_content_length(headers);
+  bool multipart = HttpRequestReader::is_multipart_request(headers);
+  size_t max_body = multipart ? static_cast<size_t>(config::MAX_UPLOAD_SIZE)
+                              : static_cast<size_t>(config::MAX_BODY_SIZE);
+  if (content_length > 0 && static_cast<size_t>(content_length) > max_body) {
+    error = HttpResponseBuilder::content_too_large("Request body too large");
+    return true;
+  }
+
+  return false;
+}
+
+void EpollEventHandler::queue_response(int client_fd,
+                                       const HttpResponse &response,
+                                       bool keep_alive) {
+  ConnectionState &conn = m_connections[client_fd];
+  conn.write_buffer = HttpResponseBuilder::build_response(response);
+  conn.write_offset = 0;
+  conn.keep_alive = keep_alive;
+
+  struct epoll_event write_event;
+  write_event.events = EPOLLOUT;
+  write_event.data.fd = client_fd;
+
+  if (epoll_ctl(m_epollfd, EPOLL_CTL_MOD, client_fd, &write_event) == -1) {
+    spdlog::error("Epoll control error: {}", strerror(errno));
+    close_connection(client_fd);
+  }
+}
+
+bool EpollEventHandler::compute_keep_alive(const HttpRequest &request) const {
+  std::string version = request.get_version();
+  bool keep_alive = (version == "HTTP/1.1");
+
+  std::string connection = request.get_header("Connection");
+  if (!connection.empty()) {
+    std::string lower = utils::lowercase(connection);
+    if (lower.find("keep-alive") != std::string::npos) {
+      keep_alive = true;
+    } else if (lower.find("close") != std::string::npos) {
+      keep_alive = false;
+    }
+  }
+
+  return keep_alive;
 }
