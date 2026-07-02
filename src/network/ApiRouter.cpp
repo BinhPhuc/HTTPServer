@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string_view>
 #include <sys/socket.h>
+#include <utils/Helper.hpp>
 
 ApiRouter::ApiRouter() : m_routes(), m_root_folder() {}
 
@@ -183,7 +184,8 @@ ApiRouter::handle_upload_static_file_request(const HttpRequest &request) {
       // nomarlize filename to avoid directory traversal attacks
       filename = std::filesystem::path(filename).filename().string();
       // random filename to avoid overwrite
-      filename = std::to_string(std::time(nullptr)) + "_" + filename;
+      filename = std::to_string(std::time(nullptr)) + "_" +
+                 utils::generate_random_number() + "_" + filename;
       size_t content_start = part.find("\r\n\r\n", filename_end);
       if (content_start != std::string_view::npos) {
         content_start += 4; // Skip the \r\n\r\n
@@ -195,6 +197,11 @@ ApiRouter::handle_upload_static_file_request(const HttpRequest &request) {
         ss << root_path.string() << "/" << m_root_folder << "/" << filename;
         std::string file_path = ss.str();
         std::ofstream outfile(file_path, std::ios::binary);
+        if (!outfile) {
+          spdlog::error("Failed to open file for writing: {}", file_path);
+          return HttpResponseBuilder::internal_server_error(
+              "Failed to save uploaded file");
+        }
         outfile.write(file_content.data(),
                       static_cast<std::streamsize>(file_content.size()));
         outfile.close();
@@ -206,7 +213,7 @@ ApiRouter::handle_upload_static_file_request(const HttpRequest &request) {
       Json::json_body(HttpResponseStatusCode(HttpResponseStatusCodeEnum::OK),
                       "File uploaded successfully");
   HttpResponse res = HttpResponseBuilder::ok(json_body);
-  res.set_header("Content-Type", "application/json, charset=utf-8");
+  res.set_header("Content-Type", "application/json; charset=utf-8");
   return res;
 }
 

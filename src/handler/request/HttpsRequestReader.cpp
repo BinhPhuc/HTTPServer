@@ -50,6 +50,9 @@ std::string HttpsRequestReader::read_request() {
       return ConnectionState(ConnectionStateEnum::TOO_LARGE);
     }
   }
+  if (content_length < 0) {
+    return ConnectionState(ConnectionStateEnum::BAD);
+  }
   size_t total_length = header_end + 4 + static_cast<size_t>(content_length);
   while (m_buffer.length() < total_length) {
     if (is_multipart && m_buffer.length() >= config::MAX_UPLOAD_SIZE) {
