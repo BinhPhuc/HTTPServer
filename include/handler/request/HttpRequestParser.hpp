@@ -6,5 +6,5 @@
 class HttpRequestParser {
 private:
 public:
-  static HttpRequest parse(const std::string &raw_request);
+  static std::pair<HttpRequest, bool> parse(const std::string &raw_request);
 };

@@ -1,12 +1,9 @@
 #include "enum/HttpEnum.hpp"
 #include "handler/request/HttpRequestParser.hpp"
-#include "handler/request/HttpRequestReader.hpp"
 #include "handler/request/HttpsRequestReader.hpp"
 #include "handler/response/HttpResponseBuilder.hpp"
-#include "handler/response/HttpResponseSender.hpp"
 #include "handler/response/HttpsResponseSender.hpp"
 #include "handler/shutdown/shutdown.hpp"
-#include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
 #include "network/ApiRouter.hpp"
 #include "tls/TLS.hpp"
@@ -206,7 +203,15 @@ void Server::start() {
           return;
         }
 
-        HttpRequest request = HttpRequestParser::parse(raw_request);
+        auto [request, is_valid_request] =
+            HttpRequestParser::parse(raw_request);
+
+        if (!is_valid_request) {
+          HttpResponse response =
+              HttpResponseBuilder::bad_request("Bad request");
+          handle_error_from_request("Bad request", response);
+          return;
+        }
 
         oss.str("");
         oss << std::this_thread::get_id();

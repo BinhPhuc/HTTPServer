@@ -31,18 +31,19 @@ HttpResponse ApiRouter::dispatch(const HttpRequest &request) {
       resource_path != "/upload") {
     return HttpResponseBuilder::bad_request("You must upload at route /upload");
   }
-  std::pair<HttpResponse, bool> static_response =
+
+  auto [static_response, found_static_file] =
       handle_get_static_file_request(request);
 
-  if (!static_response.second) {
-    std::pair<HttpResponse, bool> api_response = handle_api_request(request);
-    if (!api_response.second) {
+  if (!found_static_file) {
+    auto [response, found_api] = handle_api_request(request);
+    if (!found_api) {
       return HttpResponseBuilder::not_found();
     }
-    return api_response.first;
+    return response;
   }
 
-  return static_response.first;
+  return static_response;
 }
 
 std::pair<HttpResponse, bool>
