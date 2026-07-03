@@ -36,7 +36,7 @@ private:
   void handle_read_event(int client_fd);
   void handle_write_event(int client_fd);
   void handle_error_event(int client_fd);
-  void close_connection(int client_fd, SSL *ssl);
+  void close_connection(int client_fd);
   void handshaking(int client_fd);
   bool is_request_complete(const std::string &buffer) const;
   bool exceeds_size_limits(const std::string &buffer,
