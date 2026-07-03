@@ -4,7 +4,6 @@
 #include "handler/response/HttpResponseBuilder.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
-#include "network/SocketHelper.hpp"
 #include "utils/Constants.hpp"
 #include "utils/Helper.hpp"
 #include <cerrno>
@@ -45,7 +44,12 @@ void EpollEventHandler::handle_new_connection() {
     return;
   }
 
-  SocketHelper::set_non_blocking(client_fd);
+  int flags = fcntl(client_fd, F_GETFL, 0);
+  if (flags == -1) {
+    spdlog::error("Fcntl get flags error: {}", strerror(errno));
+  } else if (fcntl(client_fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+    spdlog::error("Fcntl set non-blocking error: {}", strerror(errno));
+  }
 
   struct epoll_event client_event;
   client_event.events = EPOLLIN;

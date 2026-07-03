@@ -1,11 +1,11 @@
 #include "network/Server.hpp"
 #include "handler/shutdown/shutdown.hpp"
 #include "network/EpollEventHandler.hpp"
-#include "network/SocketHelper.hpp"
 #include "utils/Constants.hpp"
 #include <asm-generic/socket.h>
 #include <cerrno>
 #include <cstring>
+#include <fcntl.h>
 #include <netdb.h>
 #include <spdlog/spdlog.h>
 #include <sys/epoll.h>
@@ -30,6 +30,67 @@ void Server::stop_server() {
   spdlog::info("Server stopped.");
 }
 
+void set_non_blocking(int sockfd) {
+  int flags = fcntl(sockfd, F_GETFL, 0);
+  if (flags == -1) {
+    spdlog::error("Fcntl get flags error: {}", strerror(errno));
+    return;
+  }
+  if (fcntl(sockfd, F_SETFL, flags | O_NONBLOCK) == -1) {
+    spdlog::error("Fcntl set non-blocking error: {}", strerror(errno));
+  }
+}
+
+int create_socket(int domain, int type, int protocol) {
+  int sockfd = socket(domain, type, protocol);
+  if (sockfd == -1) {
+    spdlog::error("Socket creation error: {}", strerror(errno));
+  }
+  return sockfd;
+}
+
+void get_addr_info_wrapper(const char *node, const char *service,
+                           const struct addrinfo *hints,
+                           struct addrinfo **res) {
+  int status = getaddrinfo(node, service, hints, res);
+  if (status != 0) {
+    spdlog::error("getaddrinfo error: {}", gai_strerror(status));
+  }
+}
+
+int set_sock_option(int sockfd, int level, int optname) {
+  int yes = 1;
+  int status = setsockopt(sockfd, level, optname, &yes, sizeof(int));
+  if (status == -1) {
+    spdlog::error("Setsockopt error: {}", strerror(errno));
+  }
+  return status;
+}
+
+int bind_socket(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+  int status = bind(sockfd, addr, addrlen);
+  if (status == -1) {
+    spdlog::error("Bind error: {}", strerror(errno));
+  }
+  return status;
+}
+
+int socket_listen(int sockfd, int backlog) {
+  int status = listen(sockfd, backlog);
+  if (status == -1) {
+    spdlog::error("Listen error: {}", strerror(errno));
+  }
+  return status;
+}
+
+int create_epoll() {
+  int epollfd = epoll_create1(0);
+  if (epollfd == -1) {
+    spdlog::error("Epoll creation error: {}", strerror(errno));
+  }
+  return epollfd;
+}
+
 bool Server::initialize_socket() {
   struct addrinfo hints, *res;
   memset(&hints, 0, sizeof(hints));
@@ -37,23 +98,23 @@ bool Server::initialize_socket() {
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
 
-  SocketHelper::get_addr_info(NULL, std::to_string(m_port).c_str(), &hints, &res);
+  get_addr_info_wrapper(NULL, std::to_string(m_port).c_str(), &hints, &res);
 
   struct addrinfo *p;
   for (p = res; p != NULL; p = p->ai_next) {
-    m_sockfd = SocketHelper::create_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+    m_sockfd = create_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
     if (m_sockfd == -1) {
       continue;
     }
 
-    SocketHelper::set_non_blocking(m_sockfd);
+    set_non_blocking(m_sockfd);
 
-    if (SocketHelper::set_sock_option(m_sockfd, SOL_SOCKET, SO_REUSEADDR) == -1) {
+    if (set_sock_option(m_sockfd, SOL_SOCKET, SO_REUSEADDR) == -1) {
       close(m_sockfd);
       continue;
     }
 
-    if (SocketHelper::bind_socket(m_sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+    if (bind_socket(m_sockfd, p->ai_addr, p->ai_addrlen) == -1) {
       close(m_sockfd);
       continue;
     }
@@ -68,7 +129,7 @@ bool Server::initialize_socket() {
     return false;
   }
 
-  if (SocketHelper::socket_listen(m_sockfd, config::MAX_CONNECTIONS) == -1) {
+  if (socket_listen(m_sockfd, config::MAX_CONNECTIONS) == -1) {
     close(m_sockfd);
     return false;
   }
@@ -79,7 +140,7 @@ bool Server::initialize_socket() {
 }
 
 bool Server::initialize_epoll() {
-  m_epollfd = SocketHelper::create_epoll();
+  m_epollfd = create_epoll();
   if (m_epollfd == -1) {
     return false;
   }
