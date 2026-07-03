@@ -1,15 +1,19 @@
 #include "network/EpollEventHandler.hpp"
+#include "enum/Phase.hpp"
 #include "handler/request/HttpRequestParser.hpp"
 #include "handler/request/HttpRequestReader.hpp"
 #include "handler/response/HttpResponseBuilder.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
+#include "tls/TLS.hpp"
 #include "utils/Constants.hpp"
 #include "utils/Helper.hpp"
 #include <cerrno>
 #include <cstring>
 #include <exception>
 #include <fcntl.h>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 #include <spdlog/spdlog.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
@@ -17,7 +21,10 @@
 
 EpollEventHandler::EpollEventHandler(int epollfd, int sockfd,
                                      ApiRouter &api_router)
-    : m_epollfd(epollfd), m_sockfd(sockfd), m_api_router(api_router), m_connections() {}
+    : m_epollfd(epollfd), m_sockfd(sockfd), m_api_router(api_router),
+      m_connections(), m_ssl_ctx(TLS::create_context()) {
+  TLS::configure_context(m_ssl_ctx.get());
+}
 
 void EpollEventHandler::handle_event(const struct epoll_event &event) {
   int current_fd = event.data.fd;
@@ -25,11 +32,20 @@ void EpollEventHandler::handle_event(const struct epoll_event &event) {
 
   if (current_fd == m_sockfd) {
     handle_new_connection();
-  } else if (current_event & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
+    return;
+  }
+
+  if (current_event & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
     handle_error_event(current_fd);
-  } else if (current_event & EPOLLIN) {
+    return;
+  }
+
+  ConnectionState &conn = m_connections[current_fd];
+  if (conn.phase == PhaseEnum::HANSHAKING) {
+    handshaking(current_fd);
+  } else if (conn.phase == PhaseEnum::READING) {
     handle_read_event(current_fd);
-  } else if (current_event & EPOLLOUT) {
+  } else if (conn.phase == PhaseEnum::WRITING) {
     handle_write_event(current_fd);
   }
 }
@@ -61,11 +77,53 @@ void EpollEventHandler::handle_new_connection() {
     return;
   }
 
-  m_connections[client_fd] = ConnectionState{"", "", client_fd, 0};
-  spdlog::info("New connection accepted: {}", client_fd);
+  SSL_ptr ssl(SSL_new(m_ssl_ctx.get()));
+  TLS::set_fd(ssl.get(), client_fd);
+
+  m_connections[client_fd] = ConnectionState{
+      "", "", PhaseEnum::HANSHAKING, client_fd, 0, std::move(ssl)};
+  handshaking(client_fd);
+}
+
+void EpollEventHandler::handshaking(int client_fd) {
+  ConnectionState &conn = m_connections[client_fd];
+  SSL_ptr &ssl = conn.ssl;
+
+  int ret = SSL_accept(ssl.get());
+  if (ret == 1) {
+    conn.phase = PhaseEnum::READING;
+    spdlog::info("TLS handshake completed for fd {}", client_fd);
+  } else {
+    int error = SSL_get_error(ssl.get(), ret);
+    if (error == SSL_ERROR_WANT_READ) {
+      struct epoll_event read_event;
+      read_event.events = EPOLLIN;
+      read_event.data.fd = client_fd;
+      if (epoll_ctl(m_epollfd, EPOLL_CTL_MOD, client_fd, &read_event) == -1) {
+        spdlog::error("Epoll control error: {}", strerror(errno));
+        close_connection(client_fd, ssl.get());
+        return;
+      }
+    } else if (error == SSL_ERROR_WANT_WRITE) {
+      struct epoll_event write_event;
+      write_event.events = EPOLLOUT;
+      write_event.data.fd = client_fd;
+      if (epoll_ctl(m_epollfd, EPOLL_CTL_MOD, client_fd, &write_event) == -1) {
+        spdlog::error("Epoll control error: {}", strerror(errno));
+        close_connection(client_fd, ssl.get());
+        return;
+      }
+    } else {
+      spdlog::error("TLS handshake failed for fd {}", client_fd);
+      close_connection(client_fd, ssl.get());
+      return;
+    }
+  }
 }
 
 void EpollEventHandler::handle_read_event(int client_fd) {
+  ConnectionState &conn = m_connections[client_fd];
+  SSL_ptr &ssl = conn.ssl;
   constexpr size_t buffer_size = 4096;
   char buffer[buffer_size];
 
@@ -77,11 +135,10 @@ void EpollEventHandler::handle_read_event(int client_fd) {
     } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
       spdlog::error("Receive error on fd {}: {}", client_fd, strerror(errno));
     }
-    close_connection(client_fd);
+    close_connection(client_fd, ssl.get());
     return;
   }
 
-  ConnectionState &conn = m_connections[client_fd];
   conn.read_buffer.append(buffer, static_cast<size_t>(bytes_received));
 
   HttpResponse error;
@@ -121,6 +178,7 @@ void EpollEventHandler::handle_read_event(int client_fd) {
 
 void EpollEventHandler::handle_write_event(int client_fd) {
   ConnectionState &conn = m_connections[client_fd];
+  SSL_ptr &ssl = conn.ssl;
   const std::string &response = conn.write_buffer;
   size_t offset = conn.write_offset;
 
@@ -132,7 +190,7 @@ void EpollEventHandler::handle_write_event(int client_fd) {
       return;
     }
     spdlog::error("Send error on fd {}: {}", client_fd, strerror(errno));
-    close_connection(client_fd);
+    close_connection(client_fd, ssl.get());
     return;
   }
 
@@ -140,7 +198,7 @@ void EpollEventHandler::handle_write_event(int client_fd) {
 
   if (conn.write_offset >= response.size()) {
     if (!conn.keep_alive) {
-      close_connection(client_fd);
+      close_connection(client_fd, ssl.get());
       return;
     }
 
@@ -153,18 +211,22 @@ void EpollEventHandler::handle_write_event(int client_fd) {
 
     if (epoll_ctl(m_epollfd, EPOLL_CTL_MOD, client_fd, &read_event) == -1) {
       spdlog::error("Epoll control error: {}", strerror(errno));
-      close_connection(client_fd);
+      close_connection(client_fd, ssl.get());
     }
   }
 }
 
 void EpollEventHandler::handle_error_event(int client_fd) {
+  ConnectionState &conn = m_connections[client_fd];
+  SSL_ptr &ssl = conn.ssl;
   spdlog::error("Epoll error on fd {}: {}", client_fd, strerror(errno));
-  close_connection(client_fd);
+  close_connection(client_fd, ssl.get());
 }
 
-void EpollEventHandler::close_connection(int client_fd) {
+void EpollEventHandler::close_connection(int client_fd, SSL *ssl) {
   epoll_ctl(m_epollfd, EPOLL_CTL_DEL, client_fd, NULL);
+  SSL_shutdown(ssl);
+  SSL_free(ssl);
   close(client_fd);
   m_connections.erase(client_fd);
 }
@@ -215,6 +277,7 @@ void EpollEventHandler::queue_response(int client_fd,
                                        const HttpResponse &response,
                                        bool keep_alive) {
   ConnectionState &conn = m_connections[client_fd];
+  SSL_ptr &ssl = conn.ssl;
   conn.write_buffer = HttpResponseBuilder::build_response(response);
   conn.write_offset = 0;
   conn.keep_alive = keep_alive;
@@ -225,7 +288,7 @@ void EpollEventHandler::queue_response(int client_fd,
 
   if (epoll_ctl(m_epollfd, EPOLL_CTL_MOD, client_fd, &write_event) == -1) {
     spdlog::error("Epoll control error: {}", strerror(errno));
-    close_connection(client_fd);
+    close_connection(client_fd, ssl.get());
   }
 }
 
