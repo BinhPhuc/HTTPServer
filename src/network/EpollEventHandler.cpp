@@ -128,77 +128,97 @@ void EpollEventHandler::handle_read_event(int client_fd) {
   constexpr size_t buffer_size = 4096;
   char buffer[buffer_size];
 
-  int bytes_received = SSL_read(ssl.get(), buffer, buffer_size - 1);
+  while (true) {
+    int bytes_received = SSL_read(ssl.get(), buffer, buffer_size);
 
-  if (bytes_received <= 0) {
+    if (bytes_received > 0) {
+      conn.read_buffer.append(buffer, static_cast<size_t>(bytes_received));
+      continue;
+    }
+
     if (bytes_received == 0) {
       spdlog::info("Connection closed by peer: {}", client_fd);
       close_connection(client_fd);
-    } else {
-      int error = SSL_get_error(ssl.get(), bytes_received);
-      if (error == SSL_ERROR_WANT_READ) {
-        struct epoll_event read_event;
-        read_event.events = EPOLLIN;
-        read_event.data.fd = client_fd;
-        if (epoll_ctl(m_epollfd, EPOLL_CTL_MOD, client_fd, &read_event) == -1) {
-          spdlog::error("Epoll control error: {}", strerror(errno));
-          close_connection(client_fd);
-          return;
-        }
-      } else if (error == SSL_ERROR_WANT_WRITE) {
-        struct epoll_event write_event;
-        write_event.events = EPOLLOUT;
-        write_event.data.fd = client_fd;
-        if (epoll_ctl(m_epollfd, EPOLL_CTL_MOD, client_fd, &write_event) ==
-            -1) {
-          spdlog::error("Epoll control error: {}", strerror(errno));
-          close_connection(client_fd);
-          return;
-        }
-      } else {
-        spdlog::error("SSL read error on fd {}: {}", client_fd, error);
+      return;
+    }
+
+    int error = SSL_get_error(ssl.get(), bytes_received);
+    if (error == SSL_ERROR_WANT_READ) {
+      break; 
+    } else if (error == SSL_ERROR_WANT_WRITE) {
+      struct epoll_event write_event;
+      write_event.events = EPOLLOUT;
+      write_event.data.fd = client_fd;
+      if (epoll_ctl(m_epollfd, EPOLL_CTL_MOD, client_fd, &write_event) == -1) {
+        spdlog::error("Epoll control error: {}", strerror(errno));
         close_connection(client_fd);
       }
+      return;
+    } else if (error == SSL_ERROR_ZERO_RETURN) {
+      spdlog::info("Connection closed by peer: {}", client_fd);
+      close_connection(client_fd);
+      return;
+    } else {
+      spdlog::error("SSL read error on fd {}: {}", client_fd, error);
+      close_connection(client_fd);
+      return;
     }
+  }
+
+  HttpResponse size_error;
+  if (exceeds_size_limits(conn.read_buffer, size_error)) {
+    queue_response(client_fd, size_error, false);
     return;
   }
 
-  conn.read_buffer.append(buffer, static_cast<size_t>(bytes_received));
-
-  HttpResponse error;
-  if (exceeds_size_limits(conn.read_buffer, error)) {
-    queue_response(client_fd, error, false);
-    return;
-  }
-
-  if (!is_request_complete(conn.read_buffer)) {
-    return;
-  }
-
-  size_t header_end = conn.read_buffer.find("\r\n\r\n");
-  std::string headers = conn.read_buffer.substr(0, header_end + 4);
-  int content_length = HttpRequestReader::get_content_length(headers);
-  size_t total_length = header_end + 4 + static_cast<size_t>(content_length);
-  std::string raw_request = conn.read_buffer.substr(0, total_length);
-
-  HttpResponse response;
+  std::string out;
   bool keep_alive = true;
-  try {
-    HttpRequest request = HttpRequestParser::parse(raw_request);
-    response = m_api_router.dispatch(request);
-    keep_alive = compute_keep_alive(request);
-    response.set_header("Connection", keep_alive ? "keep-alive" : "close");
-  } catch (const std::exception &e) {
-    spdlog::error("Error handling request on fd {}: {}", client_fd, e.what());
-    response =
-        HttpResponseBuilder::internal_server_error("Internal Server Error");
-    response.set_header("Connection", "close");
-    keep_alive = false;
+
+  while (is_request_complete(conn.read_buffer)) {
+    size_t header_end = conn.read_buffer.find("\r\n\r\n");
+    std::string headers = conn.read_buffer.substr(0, header_end + 4);
+    int content_length = HttpRequestReader::get_content_length(headers);
+    size_t total_length = header_end + 4 + static_cast<size_t>(content_length);
+    std::string raw_request = conn.read_buffer.substr(0, total_length);
+
+    HttpResponse response;
+    try {
+      HttpRequest request = HttpRequestParser::parse(raw_request);
+      response = m_api_router.dispatch(request);
+      keep_alive = compute_keep_alive(request);
+      response.set_header("Connection", keep_alive ? "keep-alive" : "close");
+    } catch (const std::exception &e) {
+      spdlog::error("Error handling request on fd {}: {}", client_fd, e.what());
+      response =
+          HttpResponseBuilder::internal_server_error("Internal Server Error");
+      response.set_header("Connection", "close");
+      keep_alive = false;
+    }
+
+    out += HttpResponseBuilder::build_response(response);
+    conn.read_buffer.erase(0, total_length);
+
+    if (!keep_alive) {
+      break; 
+    }
   }
 
-  conn.read_buffer.erase(0, total_length);
+  if (out.empty()) {
+    return; 
+  }
 
-  queue_response(client_fd, response, keep_alive);
+  conn.write_buffer = std::move(out);
+  conn.write_offset = 0;
+  conn.keep_alive = keep_alive;
+  conn.phase = PhaseEnum::WRITING;
+
+  struct epoll_event write_event;
+  write_event.events = EPOLLOUT;
+  write_event.data.fd = client_fd;
+  if (epoll_ctl(m_epollfd, EPOLL_CTL_MOD, client_fd, &write_event) == -1) {
+    spdlog::error("Epoll control error: {}", strerror(errno));
+    close_connection(client_fd);
+  }
 }
 
 void EpollEventHandler::handle_write_event(int client_fd) {
