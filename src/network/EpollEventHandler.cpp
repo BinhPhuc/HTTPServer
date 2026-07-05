@@ -35,12 +35,22 @@ void EpollEventHandler::handle_event(const struct epoll_event &event) {
     return;
   }
 
+  auto conn_it = m_connections.find(current_fd);
+  if (conn_it == m_connections.end()) {
+    return;
+  }
+  ConnectionState &conn = conn_it->second;
+
+  if (conn.phase == PhaseEnum::CLOSING) {
+    handle_close_event(current_fd);
+    return;
+  }
+
   if (current_event & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
     handle_error_event(current_fd);
     return;
   }
 
-  ConnectionState &conn = m_connections[current_fd];
   if (conn.phase == PhaseEnum::HANSHAKING) {
     handshaking(current_fd);
   } else if (conn.phase == PhaseEnum::READING) {
@@ -167,6 +177,7 @@ void EpollEventHandler::handle_read_event(int client_fd) {
 
   HttpResponse size_error;
   if (exceeds_size_limits(conn.read_buffer, size_error)) {
+    size_error.set_header("Connection", "close");
     queue_response(client_fd, size_error, false);
     return;
   }
@@ -183,7 +194,16 @@ void EpollEventHandler::handle_read_event(int client_fd) {
 
     HttpResponse response;
     try {
-      HttpRequest request = HttpRequestParser::parse(raw_request);
+      auto [request, is_valid_request] = HttpRequestParser::parse(raw_request);
+      if (!is_valid_request) {
+        spdlog::warn("Bad request on fd {}", client_fd);
+        response = HttpResponseBuilder::bad_request("Bad request");
+        response.set_header("Connection", "close");
+        out += HttpResponseBuilder::build_response(response);
+        conn.read_buffer.erase(0, total_length);
+        keep_alive = false;
+        break;
+      }
       response = m_api_router.dispatch(request);
       keep_alive = compute_keep_alive(request);
       response.set_header("Connection", keep_alive ? "keep-alive" : "close");
@@ -270,7 +290,7 @@ void EpollEventHandler::handle_write_event(int client_fd) {
 
   if (conn.write_offset >= response.size()) {
     if (!conn.keep_alive) {
-      close_connection(client_fd);
+      start_graceful_close(client_fd);
       return;
     }
 
@@ -298,6 +318,49 @@ void EpollEventHandler::close_connection(int client_fd) {
   epoll_ctl(m_epollfd, EPOLL_CTL_DEL, client_fd, NULL);
   close(client_fd);
   m_connections.erase(client_fd);
+}
+
+void EpollEventHandler::start_graceful_close(int client_fd) {
+  ConnectionState &conn = m_connections[client_fd];
+
+  if (conn.ssl) {
+    SSL_shutdown(conn.ssl.get());
+  }
+
+  conn.phase = PhaseEnum::CLOSING;
+
+  struct epoll_event linger_event;
+  linger_event.events = EPOLLIN | EPOLLRDHUP;
+  linger_event.data.fd = client_fd;
+  if (epoll_ctl(m_epollfd, EPOLL_CTL_MOD, client_fd, &linger_event) == -1) {
+    spdlog::error("Epoll control error: {}", strerror(errno));
+    close_connection(client_fd);
+    return;
+  }
+
+  handle_close_event(client_fd);
+}
+
+void EpollEventHandler::handle_close_event(int client_fd) {
+  ConnectionState &conn = m_connections[client_fd];
+  SSL_ptr &ssl = conn.ssl;
+
+  char sink[4096];
+  while (true) {
+    int bytes_received = SSL_read(ssl.get(), sink, sizeof(sink));
+    if (bytes_received > 0) {
+      continue;
+    }
+
+    int error = SSL_get_error(ssl.get(), bytes_received);
+    if (error == SSL_ERROR_WANT_READ) {
+      return;
+    }
+
+    break;
+  }
+
+  close_connection(client_fd);
 }
 
 bool EpollEventHandler::is_request_complete(const std::string &buffer) const {
@@ -332,6 +395,10 @@ bool EpollEventHandler::exceeds_size_limits(const std::string &buffer,
 
   int content_length = HttpRequestReader::get_content_length(headers);
   bool multipart = HttpRequestReader::is_multipart_request(headers);
+  if (content_length < 0 || (multipart && content_length <= 0)) {
+    error = HttpResponseBuilder::bad_request("Invalid Content-Length header");
+    return true;
+  }
   size_t max_body = multipart ? static_cast<size_t>(config::MAX_UPLOAD_SIZE)
                               : static_cast<size_t>(config::MAX_BODY_SIZE);
   if (content_length > 0 && static_cast<size_t>(content_length) > max_body) {

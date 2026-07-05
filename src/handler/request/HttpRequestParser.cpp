@@ -1,15 +1,14 @@
 #include "handler/request/HttpRequestParser.hpp"
 #include "http/HttpRequest.hpp"
 
-HttpRequest HttpRequestParser::parse(const std::string &raw_request) {
+std::pair<HttpRequest, bool>
+HttpRequestParser::parse(const std::string &raw_request) {
   HttpRequest request;
 
   size_t pos = 0;
   size_t line_end = raw_request.find("\r\n", pos);
   if (line_end == std::string::npos) {
-    // Invalid request
-    // TODO: Return HttpResponse with error status code 400 Bad Request
-    return request;
+    return std::make_pair(request, false);
   }
 
   // Parse request line
@@ -20,9 +19,7 @@ HttpRequest HttpRequestParser::parse(const std::string &raw_request) {
   size_t method_end = request_line.find(' ');
   size_t path_end = request_line.find(' ', method_end + 1);
   if (method_end == std::string::npos || path_end == std::string::npos) {
-    // Invalid request line
-    // TODO: Return HttpResponse with error status code 400 Bad Request
-    return request;
+    return std::make_pair(request, false);
   }
   std::string method = request_line.substr(0, method_end);
   std::string path =
@@ -59,11 +56,15 @@ HttpRequest HttpRequestParser::parse(const std::string &raw_request) {
     pos = line_end + 2;
   }
 
+  if (request.get_header("Host").empty()) {
+    return std::make_pair(request, false);
+  }
+
   // Parse body
   if (pos < raw_request.size()) {
     std::string body = raw_request.substr(pos);
     request.set_body(body);
   }
 
-  return request;
+  return std::make_pair(request, true);
 }

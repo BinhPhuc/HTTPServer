@@ -2,6 +2,6 @@
 
 #include <string>
 
-enum class PhaseEnum { HANSHAKING, READING, WRITING };
+enum class PhaseEnum { HANSHAKING, READING, WRITING, CLOSING };
 
 std::string Phase(PhaseEnum type);

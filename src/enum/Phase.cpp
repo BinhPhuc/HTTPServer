@@ -8,6 +8,8 @@ std::string Phase(PhaseEnum type) {
     return "READING";
   case PhaseEnum::WRITING:
     return "WRITING";
+  case PhaseEnum::CLOSING:
+    return "CLOSING";
   default:
     return "UNKNOWN";
   }
