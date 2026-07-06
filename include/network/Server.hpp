@@ -3,7 +3,6 @@
 #include "network/ApiRouter.hpp"
 #include "tls/TLS.hpp"
 #include <netdb.h>
-#include <thread_pool/thread_pool.hpp>
 
 class Server {
 private:
@@ -12,7 +11,6 @@ private:
   void stopServer();
   ApiRouter &m_api_router;
   SSL_CTX_ptr m_ctx;
-  ThreadPool thread_pool;
 
 public:
   Server(int port, ApiRouter &api_router);

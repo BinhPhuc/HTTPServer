@@ -30,7 +30,7 @@
 
 Server::Server(int port, ApiRouter &api_router)
     : m_port(port), m_sockfd(-1), m_api_router(api_router),
-      m_ctx(TLS::create_context()), thread_pool() {
+      m_ctx(TLS::create_context()) {
   TLS::configure_context(m_ctx.get());
 }
 
@@ -144,7 +144,7 @@ void Server::start() {
       continue;
     }
 
-    thread_pool.enqueue([this, new_fd]() {
+    std::thread([this, new_fd]() {
       try {
         std::ostringstream oss;
         oss << std::this_thread::get_id();
@@ -273,6 +273,6 @@ void Server::start() {
         spdlog::error("Exception in connection handler: {}", e.what());
         close(new_fd);
       }
-    });
+    }).detach();
   }
 }
