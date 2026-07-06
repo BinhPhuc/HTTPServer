@@ -44,8 +44,8 @@ if [ $? -eq 0 ]; then
     echo -e "${YELLOW}========================================${NC}"
     echo -e "${YELLOW}Running server...${NC}"
     echo -e "${YELLOW}========================================${NC}"
-    
-    ./server
+
+    ./server "$@"
 else
     echo -e "${RED}✗ Build failed!${NC}"
     exit 1

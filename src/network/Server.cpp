@@ -28,10 +28,16 @@
 #include <unistd.h>
 #include <utils/Helper.hpp>
 
-Server::Server(int port, ApiRouter &api_router)
+Server::Server(int port, ApiRouter &api_router, size_t num_workers,
+               bool keep_alive_enabled)
     : m_port(port), m_sockfd(-1), m_api_router(api_router),
-      m_ctx(TLS::create_context()), thread_pool() {
+      m_ctx(TLS::create_context()),
+      thread_pool(num_workers > 0 ? num_workers
+                                  : std::thread::hardware_concurrency()),
+      m_keep_alive_enabled(keep_alive_enabled) {
   TLS::configure_context(m_ctx.get());
+  spdlog::info("Keep-alive is {}.",
+               m_keep_alive_enabled ? "enabled" : "disabled");
 }
 
 Server::~Server() { stopServer(); }
@@ -251,6 +257,11 @@ void Server::start() {
             } else if (connection_header == "close") {
               keep_alive = false;
             }
+          }
+
+          if (!m_keep_alive_enabled) {
+            keep_alive = false;
+            connection_header = "close";
           }
 
           oss.str("");

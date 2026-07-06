@@ -21,4 +21,4 @@ if [ ! -f "build/server" ]; then
 fi
 
 echo -e "${GREEN}Starting server...${NC}"
-./build/server
+./build/server "$@"
