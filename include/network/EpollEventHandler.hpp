@@ -30,7 +30,7 @@ private:
   int m_sockfd;
   ApiRouter &m_api_router;
   std::unordered_map<int, ConnectionState> m_connections;
-  SSL_CTX_ptr m_ssl_ctx;
+  SSL_CTX *m_ssl_ctx;
 
   void handle_new_connection();
   void handle_read_event(int client_fd);
@@ -48,6 +48,9 @@ private:
   bool compute_keep_alive(const HttpRequest &request) const;
 
 public:
-  EpollEventHandler(int epollfd, int sockfd, ApiRouter &api_router);
+  EpollEventHandler(int epollfd, int sockfd, ApiRouter &api_router,
+                    SSL_CTX *ssl_ctx);
+  EpollEventHandler(const EpollEventHandler &) = delete;
+  EpollEventHandler &operator=(const EpollEventHandler &) = delete;
   void handle_event(const struct epoll_event &event);
 };

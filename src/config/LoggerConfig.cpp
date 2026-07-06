@@ -8,7 +8,6 @@ namespace logging {
 
 void LoggerConfig::initialize(const std::string &log_file_path) {
   try {
-    // Initialize async thread pool: queue size 8192, 1 background thread
     spdlog::init_thread_pool(8192, 1);
     
     auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
@@ -38,4 +37,4 @@ void LoggerConfig::shutdown() {
   spdlog::shutdown();
 }
 
-} // namespace logging
+}

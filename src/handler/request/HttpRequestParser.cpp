@@ -11,11 +11,9 @@ HttpRequestParser::parse(const std::string &raw_request) {
     return std::make_pair(request, false);
   }
 
-  // Parse request line
   std::string request_line = raw_request.substr(pos, line_end - pos);
   request.set_request_line(request_line);
 
-  // Parse method, path, version
   size_t method_end = request_line.find(' ');
   size_t path_end = request_line.find(' ', method_end + 1);
   if (method_end == std::string::npos || path_end == std::string::npos) {
@@ -35,7 +33,6 @@ HttpRequestParser::parse(const std::string &raw_request) {
   request.set_path_only(path_only);
   request.set_version(version);
 
-  // Parse headers
   pos = line_end + 2;
   while (true) {
     line_end = raw_request.find("\r\n", pos);
@@ -60,7 +57,6 @@ HttpRequestParser::parse(const std::string &raw_request) {
     return std::make_pair(request, false);
   }
 
-  // Parse body
   if (pos < raw_request.size()) {
     std::string body = raw_request.substr(pos);
     request.set_body(body);

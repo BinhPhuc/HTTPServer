@@ -28,7 +28,6 @@ SSL_CTX_ptr TLS::create_context() {
 
 void TLS::configure_context(SSL_CTX *ctx, const std::string &cert_file,
                             const std::string &key_file) {
-  // SSL_CTX_set_ecdh_auto(ctx, 1);
   SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
   if (SSL_CTX_use_certificate_file(ctx, cert_file.c_str(), SSL_FILETYPE_PEM) <=
       0) {

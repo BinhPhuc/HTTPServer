@@ -21,7 +21,7 @@ public:
   std::string get_status_message() const;
 
   void set_header(const std::string &key,
-                  const std::string &value); // set mean add more headers
+                  const std::string &value);
   std::unordered_map<std::string, std::string> get_headers() const;
   std::string get_headers(const std::string &key) const;
 

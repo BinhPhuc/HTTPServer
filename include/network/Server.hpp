@@ -1,23 +1,25 @@
 #pragma once
 
 #include "network/ApiRouter.hpp"
-#include <netdb.h>
-#include <thread_pool/thread_pool.hpp>
+#include "tls/TLS.hpp"
+#include <cstddef>
+#include <thread>
+#include <vector>
 
 class Server {
 private:
   int m_port;
-  int m_sockfd;
-  int m_epollfd;
+  size_t m_num_loops;
   ApiRouter &m_api_router;
+  SSL_CTX_ptr m_ssl_ctx;
+  std::vector<std::thread> m_workers;
 
-  void stop_server();
-  bool initialize_socket();
-  bool initialize_epoll();
-  void run_event_loop();
+  int create_listen_socket();
+  void run_event_loop(int loop_id, int wakeup_fd);
 
 public:
-  Server(int port, ApiRouter &api_router);
+  Server(int port, ApiRouter &api_router,
+         size_t num_loops = std::thread::hardware_concurrency());
   ~Server();
   void start();
 };

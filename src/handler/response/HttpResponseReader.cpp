@@ -12,9 +12,9 @@ int HttpResponseReader::send_all(int sockfd, const char *buf, size_t len) {
     const size_t remaining = total_len - total_sent;
     const ssize_t sent = send(sockfd, buf + total_sent, remaining, 0);
     if (sent <= 0) {
-      return -1; // Send error or connection closed
+      return -1;
     }
     total_sent += static_cast<size_t>(sent);
   }
-  return 0; // Success
+  return 0;
 }

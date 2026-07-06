@@ -20,11 +20,9 @@
 #include <unistd.h>
 
 EpollEventHandler::EpollEventHandler(int epollfd, int sockfd,
-                                     ApiRouter &api_router)
+                                     ApiRouter &api_router, SSL_CTX *ssl_ctx)
     : m_epollfd(epollfd), m_sockfd(sockfd), m_api_router(api_router),
-      m_connections(), m_ssl_ctx(TLS::create_context()) {
-  TLS::configure_context(m_ssl_ctx.get());
-}
+      m_connections(), m_ssl_ctx(ssl_ctx) {}
 
 void EpollEventHandler::handle_event(const struct epoll_event &event) {
   int current_fd = event.data.fd;
@@ -87,7 +85,7 @@ void EpollEventHandler::handle_new_connection() {
     return;
   }
 
-  SSL_ptr ssl(SSL_new(m_ssl_ctx.get()));
+  SSL_ptr ssl(SSL_new(m_ssl_ctx));
   TLS::set_fd(ssl.get(), client_fd);
 
   m_connections[client_fd] = ConnectionState{

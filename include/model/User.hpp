@@ -4,7 +4,6 @@
 class User {
 public:
   User(int id, const std::string &name, const std::string &email);
-  // ~User();
   void set_id(int new_id);
   int get_id() const;
   void set_name(const std::string &new_name);

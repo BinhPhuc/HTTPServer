@@ -9,4 +9,4 @@ public:
   static void shutdown();
 };
 
-} // namespace logging
+}

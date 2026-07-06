@@ -4,28 +4,27 @@
 #include "utils/Constants.hpp"
 #include <asm-generic/socket.h>
 #include <cerrno>
+#include <cstdint>
 #include <cstring>
 #include <fcntl.h>
 #include <netdb.h>
 #include <spdlog/spdlog.h>
 #include <sys/epoll.h>
+#include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
-Server::Server(int port, ApiRouter &api_router)
-    : m_port(port), m_sockfd(-1), m_epollfd(-1), m_api_router(api_router) {}
+Server::Server(int port, ApiRouter &api_router, size_t num_loops)
+    : m_port(port), m_num_loops(num_loops == 0 ? 1 : num_loops),
+      m_api_router(api_router), m_ssl_ctx(TLS::create_context()), m_workers() {
+  TLS::configure_context(m_ssl_ctx.get());
+}
 
-Server::~Server() { stop_server(); }
-
-void Server::stop_server() {
-  if (m_epollfd != -1) {
-    close(m_epollfd);
-    m_epollfd = -1;
-  }
-  if (m_sockfd != -1) {
-    spdlog::info("Stopping server on port {}.", m_port);
-    close(m_sockfd);
-    m_sockfd = -1;
+Server::~Server() {
+  for (std::thread &worker : m_workers) {
+    if (worker.joinable()) {
+      worker.join();
+    }
   }
   spdlog::info("Server stopped.");
 }
@@ -91,7 +90,7 @@ int create_epoll() {
   return epollfd;
 }
 
-bool Server::initialize_socket() {
+int Server::create_listen_socket() {
   struct addrinfo hints, *res;
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_UNSPEC;
@@ -100,22 +99,26 @@ bool Server::initialize_socket() {
 
   get_addr_info_wrapper(NULL, std::to_string(m_port).c_str(), &hints, &res);
 
+  int sockfd = -1;
   struct addrinfo *p;
   for (p = res; p != NULL; p = p->ai_next) {
-    m_sockfd = create_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-    if (m_sockfd == -1) {
+    sockfd = create_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+    if (sockfd == -1) {
       continue;
     }
 
-    set_non_blocking(m_sockfd);
+    set_non_blocking(sockfd);
 
-    if (set_sock_option(m_sockfd, SOL_SOCKET, SO_REUSEADDR) == -1) {
-      close(m_sockfd);
+    if (set_sock_option(sockfd, SOL_SOCKET, SO_REUSEADDR) == -1 ||
+        set_sock_option(sockfd, SOL_SOCKET, SO_REUSEPORT) == -1) {
+      close(sockfd);
+      sockfd = -1;
       continue;
     }
 
-    if (bind_socket(m_sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-      close(m_sockfd);
+    if (bind_socket(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+      close(sockfd);
+      sockfd = -1;
       continue;
     }
 
@@ -124,74 +127,123 @@ bool Server::initialize_socket() {
 
   freeaddrinfo(res);
 
-  if (p == NULL) {
-    spdlog::error("Failed to bind socket.");
-    return false;
+  if (p == NULL || sockfd == -1) {
+    spdlog::error("Failed to bind listening socket.");
+    return -1;
   }
 
-  if (socket_listen(m_sockfd, config::MAX_CONNECTIONS) == -1) {
-    close(m_sockfd);
-    return false;
+  if (socket_listen(sockfd, config::MAX_CONNECTIONS) == -1) {
+    close(sockfd);
+    return -1;
   }
 
-  ShutdownHandler::listen_fd.store(m_sockfd);
-
-  return true;
+  return sockfd;
 }
 
-bool Server::initialize_epoll() {
-  m_epollfd = create_epoll();
-  if (m_epollfd == -1) {
-    return false;
+void Server::run_event_loop(int loop_id, int wakeup_fd) {
+  int listen_fd = create_listen_socket();
+  if (listen_fd == -1) {
+    return;
   }
 
-  struct epoll_event event;
-  event.events = EPOLLIN;
-  event.data.fd = m_sockfd;
-
-  if (epoll_ctl(m_epollfd, EPOLL_CTL_ADD, m_sockfd, &event) == -1) {
-    spdlog::error("Epoll control error: {}", strerror(errno));
-    close(m_epollfd);
-    return false;
+  int epollfd = create_epoll();
+  if (epollfd == -1) {
+    close(listen_fd);
+    return;
   }
 
-  return true;
-}
+  struct epoll_event listen_event;
+  listen_event.events = EPOLLIN;
+  listen_event.data.fd = listen_fd;
+  if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_fd, &listen_event) == -1) {
+    spdlog::error("Epoll control error (listen socket): {}", strerror(errno));
+    close(epollfd);
+    close(listen_fd);
+    return;
+  }
 
-void Server::run_event_loop() {
+  struct epoll_event wakeup_event;
+  wakeup_event.events = EPOLLIN;
+  wakeup_event.data.fd = wakeup_fd;
+  if (epoll_ctl(epollfd, EPOLL_CTL_ADD, wakeup_fd, &wakeup_event) == -1) {
+    spdlog::error("Epoll control error (wakeup fd): {}", strerror(errno));
+    close(epollfd);
+    close(listen_fd);
+    return;
+  }
+
+  EpollEventHandler event_handler(epollfd, listen_fd, m_api_router,
+                                  m_ssl_ctx.get());
+
   struct epoll_event events[config::MAX_CONNECTIONS];
-  EpollEventHandler event_handler(m_epollfd, m_sockfd, m_api_router);
-
-  spdlog::info("Server started on port {}.", m_port);
+  spdlog::info("Event loop {} started on port {}.", loop_id, m_port);
 
   while (ShutdownHandler::running.load()) {
-    int num_events = epoll_wait(m_epollfd, events, config::MAX_CONNECTIONS, -1);
+    int num_events = epoll_wait(epollfd, events, config::MAX_CONNECTIONS, -1);
 
     if (num_events == -1) {
       if (errno == EINTR) {
         continue;
       }
-      spdlog::error("Epoll wait error: {}", strerror(errno));
+      spdlog::error("Epoll wait error on loop {}: {}", loop_id,
+                    strerror(errno));
       break;
     }
 
     for (int i = 0; i < num_events; i++) {
+      if (events[i].data.fd == wakeup_fd) {
+        uint64_t drained;
+        while (read(wakeup_fd, &drained, sizeof(drained)) > 0) {
+        }
+        continue;
+      }
       event_handler.handle_event(events[i]);
     }
   }
 
-  spdlog::info("Event loop exited, shutting down gracefully.");
+  close(epollfd);
+  close(listen_fd);
+  spdlog::info("Event loop {} exited.", loop_id);
 }
 
 void Server::start() {
-  if (!initialize_socket()) {
+  std::vector<int> wakeup_fds;
+
+  for (size_t i = 0; i < m_num_loops; i++) {
+    int efd = eventfd(0, EFD_NONBLOCK);
+    if (efd == -1) {
+      spdlog::error("eventfd creation error: {}", strerror(errno));
+      break;
+    }
+    wakeup_fds.push_back(efd);
+    ShutdownHandler::register_wakeup(efd);
+  }
+
+  if (wakeup_fds.empty()) {
+    spdlog::error("No event loops could be started.");
     return;
   }
 
-  if (!initialize_epoll()) {
-    close(m_sockfd);
-    return;
+  spdlog::info("Starting {} parallel event loops on port {}.",
+               wakeup_fds.size(), m_port);
+
+  for (size_t i = 0; i < wakeup_fds.size(); i++) {
+    int loop_id = static_cast<int>(i);
+    int wakeup_fd = wakeup_fds[i];
+    m_workers.emplace_back(
+        [this, loop_id, wakeup_fd] { run_event_loop(loop_id, wakeup_fd); });
   }
 
-  run_event_loop();
+  for (std::thread &worker : m_workers) {
+    if (worker.joinable()) {
+      worker.join();
+    }
+  }
+  m_workers.clear();
+
+  for (int fd : wakeup_fds) {
+    close(fd);
+  }
+
+  spdlog::info("All event loops stopped, shutting down gracefully.");
 }
